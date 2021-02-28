@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// http://localhost:8080/time?pace=4m50s&distance=21095
 func timeHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
