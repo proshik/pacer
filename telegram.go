@@ -15,7 +15,7 @@ func NewTelegramBot(token string) {
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-	webHookConfig := tgbotapi.NewWebhook("https://www.localhost:3009")
+	webHookConfig := tgbotapi.NewWebhook("https://www.localhost:80")
 
 	_, err = bot.SetWebhook(webHookConfig)
 	if err != nil {
