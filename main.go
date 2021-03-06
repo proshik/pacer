@@ -11,6 +11,12 @@ import (
 func main() {
 	serveMux := http.NewServeMux()
 
+	port := os.Getenv("PORT")
+
+	if port == "" {
+		log.Fatal("$PORT must be set")
+	}
+
 	token := os.Getenv("TELEGRAM_TOKEN")
 	//host := os.Getenv("HOST")
 	//
@@ -43,7 +49,7 @@ func main() {
 	serveMux.HandleFunc("/pace", paceHandler)
 
 	log.Println("Listening ... ")
-	err := http.ListenAndServe(":8080", serveMux)
+	err := http.ListenAndServe(":"+port, serveMux)
 	if err != nil {
 		panic(err)
 	}
