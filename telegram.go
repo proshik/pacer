@@ -1,11 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"log"
 )
 
-func NewTelegramBot(token string) {
+func NewTelegramBot(host string, port string, token string) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err)
@@ -15,7 +16,7 @@ func NewTelegramBot(token string) {
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-	webHookConfig := tgbotapi.NewWebhook("https://www.localhost:80")
+	webHookConfig := tgbotapi.NewWebhook(fmt.Sprintf("https://www.%s:%s", host, port))
 
 	_, err = bot.SetWebhook(webHookConfig)
 	if err != nil {
