@@ -48,6 +48,7 @@ func main() {
 	updates := make(chan tgbotapi.Update)
 
 	serveMux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("YESSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSs")
 		bytes, _ := ioutil.ReadAll(r.Body)
 
 		var update tgbotapi.Update
