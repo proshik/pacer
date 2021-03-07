@@ -45,7 +45,7 @@ func main() {
 
 	serveMux := http.NewServeMux()
 
-	updates := make(chan tgbotapi.Update)
+	//updates := make(chan tgbotapi.Update)
 
 	serveMux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("YESSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSs")
@@ -54,14 +54,16 @@ func main() {
 		var update tgbotapi.Update
 		_ = json.Unmarshal(bytes, &update)
 
-		updates <- update
+		fmt.Printf("%+v\n", update)
+
+		//updates <- update
 	})
 
-	go func() {
-		for update := range updates {
-			log.Printf("%+v\n", update)
-		}
-	}()
+	//go func() {
+	//	for update := range updates {
+	//		log.Printf("%+v\n", update)
+	//	}
+	//}()
 
 	serveMux.HandleFunc("/time", timeHandler)
 	serveMux.HandleFunc("/pace", paceHandler)
