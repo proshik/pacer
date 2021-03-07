@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 )
@@ -14,7 +15,17 @@ func main() {
 	}
 
 	token := os.Getenv("TELEGRAM_TOKEN")
+	if token == "" {
+		log.Fatal("TELEGRAM_TOKEN must be set")
+	}
+
 	host := os.Getenv("HOST")
+	if host == "" {
+		log.Fatal("{ must be set")
+	}
+
+	fmt.Printf("starting: host=%s, port=%s", host, port)
+
 	//
 	//pattern := fmt.Sprintf("/%s", token)
 	//
