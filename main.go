@@ -32,7 +32,7 @@ func main() {
 
 	webHookUrl := fmt.Sprintf("https://%s/%s", host, token)
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook?=%s", token, webHookUrl)
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook?url=%s", token, webHookUrl)
 
 	log.Printf("url: %s\n", url)
 
