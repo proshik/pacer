@@ -54,7 +54,12 @@ func main() {
 		var update tgbotapi.Update
 		_ = json.Unmarshal(bytes, &update)
 
-		fmt.Printf("%+v\n", update)
+		b, err := json.MarshalIndent(update, "", "  ")
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		fmt.Printf("%s\n", b)
 
 		//updates <- update
 	})
