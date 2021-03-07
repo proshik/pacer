@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -43,17 +45,22 @@ func main() {
 
 	serveMux := http.NewServeMux()
 
-	serveMux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-		// Read body
-		b, err := ioutil.ReadAll(r.Body)
-		defer r.Body.Close()
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
+	updates := make(chan tgbotapi.Update)
 
-		fmt.Println(b)
+	serveMux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		bytes, _ := ioutil.ReadAll(r.Body)
+
+		var update tgbotapi.Update
+		_ = json.Unmarshal(bytes, &update)
+
+		updates <- update
 	})
+
+	go func() {
+		for update := range updates {
+			log.Printf("%+v\n", update)
+		}
+	}()
 
 	serveMux.HandleFunc("/time", timeHandler)
 	serveMux.HandleFunc("/pace", paceHandler)
