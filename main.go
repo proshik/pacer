@@ -3,12 +3,11 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 )
 
 func main() {
-	//serveMux := http.NewServeMux()
-
 	port := os.Getenv("PORT")
 	if port == "" {
 		log.Fatal("$PORT must be set")
@@ -40,7 +39,9 @@ func main() {
 	//	panic(err)
 	//}
 
-	NewTelegramBot(host, port, token)
+	go NewTelegramBot(host, port, token)
+
+	serveMux := http.NewServeMux()
 
 	//serveMux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 	//	// Read body
@@ -54,12 +55,12 @@ func main() {
 	//	fmt.Println(b)
 	//})
 	//
-	//serveMux.HandleFunc("/time", timeHandler)
-	//serveMux.HandleFunc("/pace", paceHandler)
-	//
-	//log.Println("Listening ... ")
-	//err := http.ListenAndServe(":"+port, serveMux)
-	//if err != nil {
-	//	panic(err)
-	//}
+	serveMux.HandleFunc("/time", timeHandler)
+	serveMux.HandleFunc("/pace", paceHandler)
+
+	log.Println("Listening ... ")
+	err := http.ListenAndServe(":"+port, serveMux)
+	if err != nil {
+		panic(err)
+	}
 }
