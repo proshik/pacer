@@ -29,7 +29,7 @@ func main() {
 	//	panic(err)
 	//}
 
-	NewTelegramBot(token, port, host)
+	NewTelegramBot(host, port, token)
 
 	//serveMux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 	//	// Read body
