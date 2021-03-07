@@ -23,14 +23,14 @@ func NewTelegramBot(host string, port string, token string) {
 		log.Fatal(err)
 	}
 
-	info, err := bot.GetWebhookInfo()
-	if err != nil {
-		log.Fatal(err)
-	}
+	//info, err := bot.GetWebhookInfo()
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 
-	if info.LastErrorDate != 0 {
-		log.Printf("Telegram callback failed: %s", info.LastErrorMessage)
-	}
+	//if info.LastErrorDate != 0 {
+	//	log.Printf("Telegram callback failed: %s", info.LastErrorMessage)
+	//}
 	updates := bot.ListenForWebhook("/" + bot.Token)
 
 	for update := range updates {
