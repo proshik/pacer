@@ -16,7 +16,7 @@ func NewTelegramBot(host string, port string, token string) {
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-	webHookConfig := tgbotapi.NewWebhook(fmt.Sprintf("https://www.%s:%s", host, port))
+	webHookConfig := tgbotapi.NewWebhook(fmt.Sprintf("https://www.%s/%s", host, token))
 
 	_, err = bot.SetWebhook(webHookConfig)
 	if err != nil {
