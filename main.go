@@ -48,6 +48,11 @@ func main() {
 	serveMux.HandleFunc("/time", timeHandler)
 	serveMux.HandleFunc("/pace", paceHandler)
 
+	bot, err := NewTelegramBot(token)
+	if err != nil {
+		panic(err)
+	}
+
 	if host == "localhost" {
 		// need to disable web hook and set up polling bot
 		deleteWebHookUrl := fmt.Sprintf("%s/bot%s/%s?drop_pending_updates=true", TgApiUrl, token, TgMethodDeleteWebHook)
@@ -57,11 +62,6 @@ func main() {
 		}
 
 		go func() {
-			bot, err := NewTelegramBot(token)
-			if err != nil {
-				panic(err)
-			}
-
 			bot.ReadUpdates()
 		}()
 	} else {
@@ -77,12 +77,12 @@ func main() {
 		}
 
 		// listen messages handler
-		serveMux.HandleFunc(fmt.Sprintf("/%s", token), tgWebHookHandler)
+		serveMux.HandleFunc(fmt.Sprintf("/%s", token), bot.tgWebHookHandler)
 	}
 
 	log.Printf("Listening on port=%s ... ", port)
 
-	err := http.ListenAndServe(fmt.Sprintf(":%s", port), serveMux)
+	err = http.ListenAndServe(fmt.Sprintf(":%s", port), serveMux)
 	if err != nil {
 		panic(err)
 	}

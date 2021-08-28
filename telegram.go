@@ -2,8 +2,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +16,7 @@ type TgBot struct {
 	tg *tgbotapi.BotAPI
 }
 
-// incoming command chanells
+// incoming command channels
 var startC = make(chan tgbotapi.Update)
 var timeC = make(chan tgbotapi.Update)
 var paceC = make(chan tgbotapi.Update)
@@ -27,9 +30,33 @@ func NewTelegramBot(token string) (*TgBot, error) {
 		log.Fatal(err)
 	}
 
-	bot.Debug = true
+	bot.Debug = false
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
+
+	// handle incoming messages
+	go func() {
+		for {
+			select {
+			case u := <-startC:
+				messages <- handleStartCmd(&u)
+			case u := <-timeC:
+				messages <- handleTimeCmd(&u)
+			case u := <-paceC:
+				messages <- handlePaceCmd(&u)
+			}
+		}
+	}()
+
+	// handle outgoing messages
+	go func() {
+		for msg := range messages {
+			_, err := bot.Send(msg)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+	}()
 
 	return &TgBot{bot}, nil
 }
@@ -44,47 +71,14 @@ func (bot *TgBot) ReadUpdates() {
 		log.Println(err)
 	}
 
-	// handle commands from channels
-	go func() {
-		for {
-			select {
-			case u := <-startC:
-				messages <- handleStartCmd(&u)
-			case u := <-timeC:
-				messages <- handleTimeCmd(&u)
-			case u := <-paceC:
-				messages <- handlePaceCmd(&u)
-			}
-		}
-	}()
-	// Отправка сообщений пользователям.
-	// Отдельно от предыдущего блока т.к. в select нельзя обрабатывать каналы команд из которох читается(*С) и куда записыватеся(messages)
-	go func() {
-		for res := range messages {
-			_, err := bot.tg.Send(res)
-			if err != nil {
-				log.Println(err)
-			}
-		}
-	}()
-
 	for update := range updates {
 		bot.doUpdate(update)
 	}
-
 }
 
 func (bot *TgBot) doUpdate(update tgbotapi.Update) {
 	//log.Printf("%+v\n", update)
-	if update.Message.IsCommand() {
-		// send the chat action message
-		go func() {
-			_, err := bot.tg.Send(tgbotapi.NewChatAction(update.Message.Chat.ID, tgbotapi.ChatTyping))
-			if err != nil {
-				log.Println(err)
-			}
-		}()
-
+	if update.Message != nil && update.Message.IsCommand() {
 		switch update.Message.Command() {
 		case "start":
 			startC <- update
@@ -97,7 +91,11 @@ func (bot *TgBot) doUpdate(update tgbotapi.Update) {
 			startC <- update
 		}
 	} else {
-		startC <- update
+		if update.Message != nil {
+			startC <- update
+		} else {
+			log.Println("update.Message is nil")
+		}
 	}
 }
 
@@ -123,7 +121,7 @@ func handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 	}
 
 	data := strings.Split(arguments, " ")
-	if len(data) < 2 {
+	if len(data) != 2 {
 		return buildMsg(update, "should be 2 argument pace, dist separated by a space")
 	}
 
@@ -139,16 +137,57 @@ func handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 
 	resultTime := Time(dist, int(paceDuration.Seconds()))
 
-	// to Duration value
 	result := time.Duration(resultTime) * time.Second
 
 	return buildMsg(update, result.String())
 }
 
 func handlePaceCmd(update *tgbotapi.Update) tgbotapi.Chattable {
-	return buildMsg(update, "not implemented yet")
+	arguments := update.Message.CommandArguments()
+	if arguments == "" {
+		return buildMsg(update, "empty arguments")
+	}
+
+	data := strings.Split(arguments, " ")
+	if len(data) != 2 {
+		return buildMsg(update, "should be 2 argument pace, dist separated by a space")
+	}
+
+	dist, err := strconv.Atoi(data[0])
+	if err != nil {
+		return buildMsg(update, "invalid dist value")
+	}
+
+	timeDuration, err := time.ParseDuration(data[1])
+	if err != nil {
+		return buildMsg(update, "invalid time value")
+	}
+
+	resultPace := Pace(dist, int(timeDuration.Seconds()))
+
+	result := time.Duration(resultPace) * time.Second
+
+	return buildMsg(update, result.String())
 }
 
 func buildMsg(update *tgbotapi.Update, text string) tgbotapi.Chattable {
 	return tgbotapi.NewMessage(update.Message.Chat.ID, text)
+}
+
+// move to handler.go
+func (bot *TgBot) tgWebHookHandler(_ http.ResponseWriter, r *http.Request) {
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var update tgbotapi.Update
+	err = json.Unmarshal(data, &update)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	bot.doUpdate(update)
 }

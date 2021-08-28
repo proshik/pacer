@@ -2,9 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -118,20 +115,4 @@ func paceHandler(w http.ResponseWriter, r *http.Request) {
 	result := time.Duration(resultPace) * time.Second
 
 	_, _ = w.Write([]byte(result.String()))
-}
-
-func tgWebHookHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	var update tgbotapi.Update
-	err = json.Unmarshal(data, &update)
-	if err != nil {
-		log.Println(err)
-	}
-
-	fmt.Printf("%s\n", update)
 }
