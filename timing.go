@@ -2,12 +2,12 @@ package main
 
 import "math"
 
-// The method returns the pace on the kilometer by distance and full time.
+// Pace The method returns the pace on the kilometer by distance and full time.
 // The method accept parameters distance and seconds.
 //
-// A distance parameter is a number of meters.
+// A dist parameter is a number of meters (distance).
 // A time parameter is a number of seconds on the race.
-func Pace(distance int, time int) int {
+func Pace(dist int, time int) int {
 	/*
 		0. 10000/1000 = 10
 		1. 2646/10=264.6
@@ -16,7 +16,7 @@ func Pace(distance int, time int) int {
 		4. 4 + 24.6 = 4m 24.6s
 	*/
 	// 0
-	tripDistance := float64(distance) / 1000
+	tripDistance := float64(dist) / 1000
 	// 1
 	secondsOnLap := float64(time) / tripDistance
 	// 2
@@ -32,11 +32,10 @@ func Pace(distance int, time int) int {
 	}
 }
 
-// The method returns the time of race by distance and average pace on the kilometer.
-
-// A distance parameter is a number of meters.
+// Time The method returns the time of race by distance and average pace on the kilometer.
+// A dist parameter is a number of meters.
 // A pace parameter it is number of seconds on the one kilometer.
-func Time(distance int, pace int) int {
+func Time(dist int, pace int) int {
 	/*
 		1. 21097/1000 = 21,097
 		2. 280*21.097 = 5907.16
@@ -44,7 +43,7 @@ func Time(distance int, pace int) int {
 	*/
 
 	// 1
-	raceDistance := float64(distance) / 1000
+	raceDistance := float64(dist) / 1000
 	// 2
 	totalSeconds := float64(pace) * raceDistance
 

@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -9,15 +12,19 @@ import (
 	"time"
 )
 
-// http://localhost:8080/time?pace=4m50s&distance=21095
+func NewHandler() {
+
+}
+
+// http://localhost:8080/time?pace=4m50s&dist=21095
 func timeHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	// validate query params
 	errs := url.Values{}
-	distanceValue := query.Get("distance")
-	if distanceValue == "" {
-		errs.Add("distance", "field is required")
+	distValue := query.Get("dist")
+	if distValue == "" {
+		errs.Add("dist", "field is required")
 	}
 
 	paceValue := query.Get("pace")
@@ -25,9 +32,9 @@ func timeHandler(w http.ResponseWriter, r *http.Request) {
 		errs.Add("pace", "field is required")
 	}
 
-	distance, err := strconv.Atoi(distanceValue)
+	dist, err := strconv.Atoi(distValue)
 	if err != nil {
-		errs.Add("distance", "incorrect type should be number")
+		errs.Add("dist", "incorrect type should be number")
 	}
 
 	paceDuration, err := time.ParseDuration(paceValue)
@@ -53,7 +60,7 @@ func timeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// invoke method
-	resultTime := Time(distance, int(paceDuration.Seconds()))
+	resultTime := Time(dist, int(paceDuration.Seconds()))
 
 	// to Duration value
 	result := time.Duration(resultTime) * time.Second
@@ -61,15 +68,15 @@ func timeHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(result.String()))
 }
 
-// http://localhost:8080/pace?distance=21097&time=1h38m48s
+// http://localhost:8080/pace?dist=21097&time=1h38m48s
 func paceHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	// validate query params
 	errs := url.Values{}
-	distanceValue := query.Get("distance")
-	if distanceValue == "" {
-		errs.Add("distance", "field is required")
+	distValue := query.Get("dist")
+	if distValue == "" {
+		errs.Add("dist", "field is required")
 	}
 
 	timeValue := query.Get("time")
@@ -77,9 +84,9 @@ func paceHandler(w http.ResponseWriter, r *http.Request) {
 		errs.Add("time", "field is required")
 	}
 
-	distance, err := strconv.Atoi(distanceValue)
+	dist, err := strconv.Atoi(distValue)
 	if err != nil {
-		errs.Add("distance", "incorrect type should be number")
+		errs.Add("dist", "incorrect type should be number")
 	}
 
 	timeDuration, err := time.ParseDuration(timeValue)
@@ -105,10 +112,26 @@ func paceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// invoke method
-	resultPace := Pace(distance, int(timeDuration.Seconds()))
+	resultPace := Pace(dist, int(timeDuration.Seconds()))
 
 	// to Duration value
 	result := time.Duration(resultPace) * time.Second
 
 	_, _ = w.Write([]byte(result.String()))
+}
+
+func tgWebHookHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var update tgbotapi.Update
+	err = json.Unmarshal(data, &update)
+	if err != nil {
+		log.Println(err)
+	}
+
+	fmt.Printf("%s\n", update)
 }
