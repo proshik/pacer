@@ -24,13 +24,13 @@ var paceC = make(chan tgbotapi.Update)
 // send message
 var messages = make(chan tgbotapi.Chattable)
 
-func NewTelegramBot(token string) (*TgBot, error) {
+func NewTelegramBot(token string, debugMode bool) (*TgBot, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	bot.Debug = false
+	bot.Debug = debugMode
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 

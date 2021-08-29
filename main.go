@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 // 1. забираю из переменных значения порта, токена, хоста, признак локальная тачка или нет.
@@ -41,14 +42,20 @@ func main() {
 		log.Fatal("HOST must be set")
 	}
 
+	debug := os.Getenv("DEBUG")
+	debugMode := isDebugMode(debug)
+
 	fmt.Printf("starting: host=%s, port=%s", host, port)
 
 	serveMux := http.NewServeMux()
 
-	serveMux.HandleFunc("/time", timeHandler)
-	serveMux.HandleFunc("/pace", paceHandler)
+	// debugMode methods
+	if debugMode {
+		serveMux.HandleFunc("/time", timeHandler)
+		serveMux.HandleFunc("/pace", paceHandler)
+	}
 
-	bot, err := NewTelegramBot(token)
+	bot, err := NewTelegramBot(token, debugMode)
 	if err != nil {
 		panic(err)
 	}
@@ -86,4 +93,18 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func isDebugMode(debug string) bool {
+	var debugMode bool
+	if debug != "" {
+		debugModeValue, err := strconv.ParseBool(debug)
+		if err != nil {
+			panic(err)
+		}
+		debugMode = debugModeValue
+	} else {
+		debugMode = false
+	}
+	return debugMode
 }
