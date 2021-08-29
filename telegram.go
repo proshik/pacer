@@ -105,8 +105,8 @@ func handleStartCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 	// descriptions of commands
 	buf.WriteString("\n")
 	buf.WriteString("Please, enter of the following commands:\n\n")
-	buf.WriteString("[/time]() - calculate time, e.g. 4m50s 21095, where first - pace, second - distance\n")
-	buf.WriteString("[/pace]() - calculate pace, e.g. 21097 1h38m48s, where first - distance, second - time\n")
+	buf.WriteString("[/time]() - calculate time, e.g. */time 4m50s 21095*, where first - pace, second - distance\n")
+	buf.WriteString("[/pace]() - calculate pace, e.g. */pace 21097 1h38m48s*, where first - distance, second - time\n")
 
 	// create message
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, buf.String())
@@ -122,17 +122,17 @@ func handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 
 	data := strings.Split(arguments, " ")
 	if len(data) != 2 {
-		return buildMsg(update, "should be 2 argument pace, dist separated by a space")
+		return buildMsg(update, "should be 2 arguments: (pace, dist) separated by a space")
 	}
 
 	paceDuration, err := time.ParseDuration(data[0])
 	if err != nil {
-		return buildMsg(update, "invalid pace value")
+		return buildMsg(update, "invalid pace value: "+data[1])
 	}
 
 	dist, err := strconv.Atoi(data[1])
 	if err != nil {
-		return buildMsg(update, "invalid dist value")
+		return buildMsg(update, "invalid dist value: "+data[1])
 	}
 
 	resultTime := Time(dist, int(paceDuration.Seconds()))
@@ -150,17 +150,17 @@ func handlePaceCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 
 	data := strings.Split(arguments, " ")
 	if len(data) != 2 {
-		return buildMsg(update, "should be 2 argument pace, dist separated by a space")
+		return buildMsg(update, "should be 2 arguments: (pace, dist) separated by a space")
 	}
 
 	dist, err := strconv.Atoi(data[0])
 	if err != nil {
-		return buildMsg(update, "invalid dist value")
+		return buildMsg(update, "invalid dist value: "+data[0])
 	}
 
 	timeDuration, err := time.ParseDuration(data[1])
 	if err != nil {
-		return buildMsg(update, "invalid time value")
+		return buildMsg(update, "invalid time value: "+data[1])
 	}
 
 	resultPace := Pace(dist, int(timeDuration.Seconds()))
