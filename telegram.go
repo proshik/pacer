@@ -2,18 +2,17 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"errors"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type TgBot struct {
-	tg *tgbotapi.BotAPI
+	Tg         *tgbotapi.BotAPI
+	Calculator *Calculator
 }
 
 // incoming command channels
@@ -24,7 +23,7 @@ var paceC = make(chan tgbotapi.Update)
 // send message
 var messages = make(chan tgbotapi.Chattable)
 
-func NewTelegramBot(token string, debugMode bool) (*TgBot, error) {
+func NewTelegramBot(token string, debugMode bool, calculator *Calculator) (*TgBot, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err)
@@ -58,7 +57,7 @@ func NewTelegramBot(token string, debugMode bool) (*TgBot, error) {
 		}
 	}()
 
-	return &TgBot{bot}, nil
+	return &TgBot{bot, calculator}, nil
 }
 
 func (bot *TgBot) ReadUpdates() {
@@ -66,17 +65,17 @@ func (bot *TgBot) ReadUpdates() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	//read updates from telegram server
-	updates, err := bot.tg.GetUpdatesChan(u)
+	updates, err := bot.Tg.GetUpdatesChan(u)
 	if err != nil {
 		log.Println(err)
 	}
 
 	for update := range updates {
-		bot.doUpdate(update)
+		bot.DoUpdate(update)
 	}
 }
 
-func (bot *TgBot) doUpdate(update tgbotapi.Update) {
+func (bot *TgBot) DoUpdate(update tgbotapi.Update) {
 	//log.Printf("%+v\n", update)
 	if update.Message != nil && update.Message.IsCommand() {
 		switch update.Message.Command() {
@@ -115,24 +114,23 @@ func handleStartCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 }
 
 func handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
-	arguments := update.Message.CommandArguments()
-	if arguments == "" {
-		return buildMsg(update, "empty arguments")
+	arguments, err := extractArguments(update)
+	if err != nil {
+		return buildMsg(update, err.Error())
 	}
 
-	data := strings.Split(arguments, " ")
-	if len(data) != 2 {
+	if len(arguments) != 2 {
 		return buildMsg(update, "should be 2 arguments: (pace, dist) separated by a space")
 	}
 
-	paceDuration, err := time.ParseDuration(data[0])
+	paceDuration, err := time.ParseDuration(arguments[0])
 	if err != nil {
-		return buildMsg(update, "invalid pace value: "+data[1])
+		return buildMsg(update, "invalid pace value: "+arguments[1])
 	}
 
-	dist, err := strconv.Atoi(data[1])
+	dist, err := strconv.Atoi(arguments[1])
 	if err != nil {
-		return buildMsg(update, "invalid dist value: "+data[1])
+		return buildMsg(update, "invalid dist value: "+arguments[1])
 	}
 
 	resultTime := Time(dist, int(paceDuration.Seconds()))
@@ -143,24 +141,23 @@ func handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 }
 
 func handlePaceCmd(update *tgbotapi.Update) tgbotapi.Chattable {
-	arguments := update.Message.CommandArguments()
-	if arguments == "" {
-		return buildMsg(update, "empty arguments")
+	arguments, err := extractArguments(update)
+	if err != nil {
+		return buildMsg(update, err.Error())
 	}
 
-	data := strings.Split(arguments, " ")
-	if len(data) != 2 {
+	if len(arguments) != 2 {
 		return buildMsg(update, "should be 2 arguments: (pace, dist) separated by a space")
 	}
 
-	dist, err := strconv.Atoi(data[0])
+	dist, err := strconv.Atoi(arguments[0])
 	if err != nil {
-		return buildMsg(update, "invalid dist value: "+data[0])
+		return buildMsg(update, "invalid dist value: "+arguments[0])
 	}
 
-	timeDuration, err := time.ParseDuration(data[1])
+	timeDuration, err := time.ParseDuration(arguments[1])
 	if err != nil {
-		return buildMsg(update, "invalid time value: "+data[1])
+		return buildMsg(update, "invalid time value: "+arguments[1])
 	}
 
 	resultPace := Pace(dist, int(timeDuration.Seconds()))
@@ -170,24 +167,17 @@ func handlePaceCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 	return buildMsg(update, result.String())
 }
 
-func buildMsg(update *tgbotapi.Update, text string) tgbotapi.Chattable {
-	return tgbotapi.NewMessage(update.Message.Chat.ID, text)
+func extractArguments(update *tgbotapi.Update) ([]string, error) {
+	arguments := update.Message.CommandArguments()
+	if arguments == "" {
+		return nil, errors.New("empty arguments")
+	}
+
+	data := strings.Split(arguments, " ")
+
+	return data, nil
 }
 
-// move to handler.go
-func (bot *TgBot) tgWebHookHandler(_ http.ResponseWriter, r *http.Request) {
-	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	var update tgbotapi.Update
-	err = json.Unmarshal(data, &update)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	bot.doUpdate(update)
+func buildMsg(update *tgbotapi.Update, text string) tgbotapi.Chattable {
+	return tgbotapi.NewMessage(update.Message.Chat.ID, text)
 }

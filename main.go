@@ -47,17 +47,24 @@ func main() {
 
 	fmt.Printf("starting: host=%s, port=%s", host, port)
 
-	serveMux := http.NewServeMux()
+	/************* DI ***************/
 
-	// debugMode methods
-	if debugMode {
-		serveMux.HandleFunc("/time", timeHandler)
-		serveMux.HandleFunc("/pace", paceHandler)
-	}
+	calculator := NewCalculator()
 
-	bot, err := NewTelegramBot(token, debugMode)
+	bot, err := NewTelegramBot(token, debugMode, calculator)
 	if err != nil {
 		panic(err)
+	}
+
+	handler := NewHandler(bot, calculator)
+
+	/************* DI END ***************/
+
+	serveMux := http.NewServeMux()
+	// debugMode methods
+	if debugMode {
+		serveMux.HandleFunc("/time", handler.TimeHandler)
+		serveMux.HandleFunc("/pace", handler.PaceHandler)
 	}
 
 	if host == "localhost" {
@@ -84,7 +91,7 @@ func main() {
 		}
 
 		// listen messages handler
-		serveMux.HandleFunc(fmt.Sprintf("/%s", token), bot.tgWebHookHandler)
+		serveMux.HandleFunc(fmt.Sprintf("/%s", token), handler.TgWebHookHandler)
 	}
 
 	log.Printf("Listening on port=%s ... ", port)

@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -9,12 +11,17 @@ import (
 	"time"
 )
 
-func NewHandler() {
-
+type Handler struct {
+	Bot        *TgBot
+	Calculator *Calculator
 }
 
-// http://localhost:8080/time?pace=4m50s&dist=21095
-func timeHandler(w http.ResponseWriter, r *http.Request) {
+func NewHandler(bot *TgBot, calculator *Calculator) *Handler {
+	return &Handler{bot, calculator}
+}
+
+// TimeHandler http://localhost:8080/time?pace=4m50s&dist=21095
+func (h *Handler) TimeHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	// validate query params
@@ -56,17 +63,13 @@ func timeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// invoke method
-	resultTime := Time(dist, int(paceDuration.Seconds()))
-
-	// to Duration value
-	result := time.Duration(resultTime) * time.Second
+	result := h.Calculator.Time(dist, paceDuration)
 
 	_, _ = w.Write([]byte(result.String()))
 }
 
-// http://localhost:8080/pace?dist=21097&time=1h38m48s
-func paceHandler(w http.ResponseWriter, r *http.Request) {
+// PaceHandler http://localhost:8080/pace?dist=21097&time=1h38m48s
+func (h *Handler) PaceHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	// validate query params
@@ -108,11 +111,24 @@ func paceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// invoke method
-	resultPace := Pace(dist, int(timeDuration.Seconds()))
-
-	// to Duration value
-	result := time.Duration(resultPace) * time.Second
+	result := h.Calculator.Pace(dist, timeDuration)
 
 	_, _ = w.Write([]byte(result.String()))
+}
+
+func (h *Handler) TgWebHookHandler(_ http.ResponseWriter, r *http.Request) {
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var update tgbotapi.Update
+	err = json.Unmarshal(data, &update)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	h.Bot.DoUpdate(update)
 }
