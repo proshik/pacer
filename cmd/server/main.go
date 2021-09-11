@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	gorun "gorun/pkg"
+	calculator2 "gorun/pkg/calculator"
+	"gorun/pkg/http/rest"
 	"log"
 	"net/http"
 	"os"
@@ -49,14 +52,14 @@ func main() {
 
 	/************* DI ***************/
 
-	calculator := NewCalculator()
+	calculator := calculator2.NewService()
 
-	bot, err := NewTelegramBot(token, debugMode, calculator)
+	bot, err := gorun.NewTelegramBot(token, debugMode, calculator)
 	if err != nil {
 		panic(err)
 	}
 
-	handler := NewHandler(bot, calculator)
+	handler := rest.NewHandler(bot, calculator)
 
 	/************* DI END ***************/
 
@@ -66,6 +69,9 @@ func main() {
 		serveMux.HandleFunc("/time", handler.TimeHandler)
 		serveMux.HandleFunc("/pace", handler.PaceHandler)
 	}
+
+	fs := http.FileServer(http.Dir("../../webassembly/assets"))
+	serveMux.Handle("/", http.StripPrefix("/", fs))
 
 	if host == "localhost" {
 		// need to disable web hook and set up polling bot

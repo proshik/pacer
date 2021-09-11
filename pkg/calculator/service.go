@@ -1,6 +1,8 @@
-package main
+package calculator
 
-import "time"
+import (
+	"time"
+)
 
 type Unit int
 
@@ -9,21 +11,21 @@ const (
 	imperial
 )
 
-type Calculator struct {
+type Service struct {
 	//unit Unit
 }
 
-func NewCalculator() *Calculator {
-	return &Calculator{}
+func NewService() *Service {
+	return &Service{}
 }
 
-func (c *Calculator) Time(dist int, pace time.Duration) time.Duration {
+func (c *Service) Time(dist int, pace time.Duration) time.Duration {
 	resultTime := Time(dist, int(pace.Seconds()))
 
 	return time.Duration(resultTime) * time.Second
 }
 
-func (c *Calculator) Pace(dist int, timeValue time.Duration) time.Duration {
+func (c *Service) Pace(dist int, timeValue time.Duration) time.Duration {
 	resultPace := Pace(dist, int(timeValue.Seconds()))
 
 	return time.Duration(resultPace) * time.Second

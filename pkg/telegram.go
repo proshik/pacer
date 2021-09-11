@@ -1,9 +1,10 @@
-package main
+package gorun
 
 import (
 	"bytes"
 	"errors"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"gorun/pkg/calculator"
 	"log"
 	"strconv"
 	"strings"
@@ -12,7 +13,7 @@ import (
 
 type TgBot struct {
 	Tg         *tgbotapi.BotAPI
-	Calculator *Calculator
+	Calculator *calculator.Service
 }
 
 // incoming command channels
@@ -23,7 +24,7 @@ var paceC = make(chan tgbotapi.Update)
 // send message
 var messages = make(chan tgbotapi.Chattable)
 
-func NewTelegramBot(token string, debugMode bool, calculator *Calculator) (*TgBot, error) {
+func NewTelegramBot(token string, debugMode bool, calculator *calculator.Service) (*TgBot, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err)
@@ -133,7 +134,7 @@ func handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 		return buildMsg(update, "invalid dist value: "+arguments[1])
 	}
 
-	resultTime := Time(dist, int(paceDuration.Seconds()))
+	resultTime := calculator.Time(dist, int(paceDuration.Seconds()))
 
 	result := time.Duration(resultTime) * time.Second
 
@@ -160,7 +161,7 @@ func handlePaceCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 		return buildMsg(update, "invalid time value: "+arguments[1])
 	}
 
-	resultPace := Pace(dist, int(timeDuration.Seconds()))
+	resultPace := calculator.Pace(dist, int(timeDuration.Seconds()))
 
 	result := time.Duration(resultPace) * time.Second
 
