@@ -25,11 +25,6 @@ import (
 //- (дистанция + тайм) = пейс
 // 2. используя библиотеку и по отдельной кнопке генерирую картинку (svg) с рерзультатом по заданным параметрам
 
-const TgApiUrl = "https://api.telegram.org"
-
-const TgMethodSetWebHook = "setWebhook"
-const TgMethodDeleteWebHook = "deleteWebhook"
-
 //go:embed assets
 var assets embed.FS
 
@@ -80,24 +75,14 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	frontendFS := http.FileServer(http.FS(stripped))
-	serveMux.Handle("/", frontendFS)
+	assetsDir := http.FileServer(http.FS(stripped))
+	serveMux.Handle("/", assetsDir)
 
-	if host == "localhost" {
-		// need to disable web hook and set up polling bot
-		deleteWebHookUrl := fmt.Sprintf("%s/bot%s/%s?drop_pending_updates=true", TgApiUrl, token, TgMethodDeleteWebHook)
-		_, err := http.Get(deleteWebHookUrl)
-		if err != nil {
-			panic(err)
-		}
-
-		go func() {
-			bot.ReadUpdates()
-		}()
-	} else {
+	if host != "localhost" {
 		// setting webhook
 		webHookUrl := fmt.Sprintf("https://%s/%s", host, token)
-		setWebHookUrl := fmt.Sprintf("%s/bot%s/%s?url=%s", TgApiUrl, token, TgMethodSetWebHook, webHookUrl)
+		setWebHookUrl :=
+			fmt.Sprintf("%s/bot%s/%s?url=%s", gorun.TgApiUrl, token, gorun.TgMethodSetWebHook, webHookUrl)
 
 		log.Printf("url: %s\n", setWebHookUrl)
 
@@ -110,12 +95,8 @@ func main() {
 		serveMux.HandleFunc(fmt.Sprintf("/%s", token), handler.TgWebHookHandler)
 	}
 
-	log.Printf("Listening on port=%s ... ", port)
-
-	err = http.ListenAndServe(fmt.Sprintf(":%s", port), serveMux)
-	if err != nil {
-		panic(err)
-	}
+	fmt.Printf("The server is on tap now on port: %s", port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), serveMux))
 }
 
 func isDebugMode(debug string) bool {

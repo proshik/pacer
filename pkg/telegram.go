@@ -3,13 +3,20 @@ package gorun
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"gorun/pkg/calculator"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
+
+const TgApiUrl = "https://api.telegram.org"
+
+const TgMethodSetWebHook = "setWebhook"
+const TgMethodDeleteWebHook = "deleteWebhook"
 
 type TgBot struct {
 	Tg         *tgbotapi.BotAPI
@@ -58,25 +65,53 @@ func NewTelegramBot(token string, debugMode bool, calculator *calculator.Service
 		}
 	}()
 
+	if debugMode {
+		// need to disable web hook and set up polling bot
+		deleteWebHookUrl := fmt.Sprintf("%s/bot%s/%s?drop_pending_updates=true", TgApiUrl, token, TgMethodDeleteWebHook)
+		_, err := http.Get(deleteWebHookUrl)
+		if err != nil {
+			panic(err)
+		}
+
+		// create timeout value
+		u := tgbotapi.NewUpdate(0)
+		u.Timeout = 60
+		//read updates from telegram server
+		updates, err := bot.GetUpdatesChan(u)
+		if err != nil {
+			log.Println(err)
+		}
+
+		go func() {
+			for update := range updates {
+				handleUpdate(update)
+			}
+		}()
+	}
+
 	return &TgBot{bot, calculator}, nil
 }
 
-func (bot *TgBot) ReadUpdates() {
-	// create timeout value
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-	//read updates from telegram server
-	updates, err := bot.Tg.GetUpdatesChan(u)
-	if err != nil {
-		log.Println(err)
-	}
-
-	for update := range updates {
-		bot.DoUpdate(update)
-	}
-}
+//func (bot *TgBot) ReadUpdates() {
+//	// create timeout value
+//	u := tgbotapi.NewUpdate(0)
+//	u.Timeout = 60
+//	//read updates from telegram server
+//	updates, err := bot.Tg.GetUpdatesChan(u)
+//	if err != nil {
+//		log.Println(err)
+//	}
+//
+//	for update := range updates {
+//		bot.DoUpdate(update)
+//	}
+//}
 
 func (bot *TgBot) DoUpdate(update tgbotapi.Update) {
+	handleUpdate(update)
+}
+
+func handleUpdate(update tgbotapi.Update) {
 	//log.Printf("%+v\n", update)
 	if update.Message != nil && update.Message.IsCommand() {
 		switch update.Message.Command() {
