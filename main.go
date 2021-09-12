@@ -1,10 +1,12 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	gorun "gorun/pkg"
 	calculator2 "gorun/pkg/calculator"
 	"gorun/pkg/http/rest"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -27,6 +29,9 @@ const TgApiUrl = "https://api.telegram.org"
 
 const TgMethodSetWebHook = "setWebhook"
 const TgMethodDeleteWebHook = "deleteWebhook"
+
+//go:embed assets
+var assets embed.FS
 
 func main() {
 	// read environment variables
@@ -70,8 +75,13 @@ func main() {
 		serveMux.HandleFunc("/pace", handler.PaceHandler)
 	}
 
-	fs := http.FileServer(http.Dir("../../webassembly/assets"))
-	serveMux.Handle("/", http.StripPrefix("/", fs))
+	stripped, err := fs.Sub(assets, "assets")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	frontendFS := http.FileServer(http.FS(stripped))
+	serveMux.Handle("/", frontendFS)
 
 	if host == "localhost" {
 		// need to disable web hook and set up polling bot
