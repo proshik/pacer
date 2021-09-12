@@ -1,4 +1,4 @@
-package gorun
+package telegram
 
 import (
 	"bytes"
@@ -18,9 +18,9 @@ const TgApiUrl = "https://api.telegram.org"
 const TgMethodSetWebHook = "setWebhook"
 const TgMethodDeleteWebHook = "deleteWebhook"
 
-type TgBot struct {
-	Tg         *tgbotapi.BotAPI
-	Calculator *calculator.Service
+type Service struct {
+	bot        *tgbotapi.BotAPI
+	calculator *calculator.Service
 }
 
 // incoming command channels
@@ -31,10 +31,10 @@ var paceC = make(chan tgbotapi.Update)
 // send message
 var messages = make(chan tgbotapi.Chattable)
 
-func NewTelegramBot(token string, debugMode bool, calculator *calculator.Service) (*TgBot, error) {
+func NewService(debugMode bool, host string, token string, calculator *calculator.Service) *Service {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	bot.Debug = debugMode
@@ -67,7 +67,8 @@ func NewTelegramBot(token string, debugMode bool, calculator *calculator.Service
 
 	if debugMode {
 		// need to disable web hook and set up polling bot
-		deleteWebHookUrl := fmt.Sprintf("%s/bot%s/%s?drop_pending_updates=true", TgApiUrl, token, TgMethodDeleteWebHook)
+		deleteWebHookUrl :=
+			fmt.Sprintf("%s/bot%s/%s?drop_pending_updates=true", TgApiUrl, token, TgMethodDeleteWebHook)
 		_, err := http.Get(deleteWebHookUrl)
 		if err != nil {
 			panic(err)
@@ -79,7 +80,7 @@ func NewTelegramBot(token string, debugMode bool, calculator *calculator.Service
 		//read updates from telegram server
 		updates, err := bot.GetUpdatesChan(u)
 		if err != nil {
-			log.Println(err)
+			panic(err)
 		}
 
 		go func() {
@@ -87,32 +88,27 @@ func NewTelegramBot(token string, debugMode bool, calculator *calculator.Service
 				handleUpdate(update)
 			}
 		}()
+	} else {
+		// setting webhook
+		webHookUrl := fmt.Sprintf("https://%s/%s", host, token)
+		setWebHookUrl := fmt.Sprintf("%s/bot%s/%s?url=%s", TgApiUrl, token, TgMethodSetWebHook, webHookUrl)
+
+		log.Printf("url: %s\n", setWebHookUrl)
+
+		_, err := http.Get(setWebHookUrl)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	return &TgBot{bot, calculator}, nil
+	return &Service{bot, calculator}
 }
 
-//func (bot *TgBot) ReadUpdates() {
-//	// create timeout value
-//	u := tgbotapi.NewUpdate(0)
-//	u.Timeout = 60
-//	//read updates from telegram server
-//	updates, err := bot.Tg.GetUpdatesChan(u)
-//	if err != nil {
-//		log.Println(err)
-//	}
-//
-//	for update := range updates {
-//		bot.DoUpdate(update)
-//	}
-//}
-
-func (bot *TgBot) DoUpdate(update tgbotapi.Update) {
+func (s *Service) DoUpdate(update tgbotapi.Update) {
 	handleUpdate(update)
 }
 
 func handleUpdate(update tgbotapi.Update) {
-	//log.Printf("%+v\n", update)
 	if update.Message != nil && update.Message.IsCommand() {
 		switch update.Message.Command() {
 		case "start":
@@ -140,8 +136,12 @@ func handleStartCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 	// descriptions of commands
 	buf.WriteString("\n")
 	buf.WriteString("Please, enter of the following commands:\n\n")
-	buf.WriteString("[/time]() - calculate time, e.g. */time 4m50s 21095*, where first - pace, second - distance\n")
-	buf.WriteString("[/pace]() - calculate pace, e.g. */pace 21097 1h38m48s*, where first - distance, second - time\n")
+	buf.WriteString(
+		"[/time]() - calculate time, e.g. */time 4m50s 21095*, where first - pace, second - distance\n",
+	)
+	buf.WriteString(
+		"[/pace]() - calculate pace, e.g. */pace 21097 1h38m48s*, where first - distance, second - time\n",
+	)
 
 	// create message
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, buf.String())

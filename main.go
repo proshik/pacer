@@ -3,10 +3,9 @@ package main
 import (
 	"embed"
 	"fmt"
-	gorun "gorun/pkg"
-	calculator2 "gorun/pkg/calculator"
+	"gorun/pkg/calculator"
 	"gorun/pkg/http/rest"
-	"io/fs"
+	"gorun/pkg/telegram"
 	"log"
 	"net/http"
 	"os"
@@ -35,8 +34,8 @@ func main() {
 		log.Fatal("PORT must be set")
 	}
 
-	token := os.Getenv("TELEGRAM_TOKEN")
-	if token == "" {
+	tgToken := os.Getenv("TELEGRAM_TOKEN")
+	if tgToken == "" {
 		log.Fatal("TELEGRAM_TOKEN must be set")
 	}
 
@@ -45,58 +44,16 @@ func main() {
 		log.Fatal("HOST must be set")
 	}
 
-	debug := os.Getenv("DEBUG")
-	debugMode := isDebugMode(debug)
+	debugValue := os.Getenv("DEBUG")
+	debug := isDebugMode(debugValue)
 
-	fmt.Printf("starting: host=%s, port=%s", host, port)
+	c := calculator.NewService()
+	t := telegram.NewService(debug, host, tgToken, c)
 
-	/************* DI ***************/
-
-	calculator := calculator2.NewService()
-
-	bot, err := gorun.NewTelegramBot(token, debugMode, calculator)
-	if err != nil {
-		panic(err)
-	}
-
-	handler := rest.NewHandler(bot, calculator)
-
-	/************* DI END ***************/
-
-	serveMux := http.NewServeMux()
-	// debugMode methods
-	if debugMode {
-		serveMux.HandleFunc("/time", handler.TimeHandler)
-		serveMux.HandleFunc("/pace", handler.PaceHandler)
-	}
-
-	stripped, err := fs.Sub(assets, "assets")
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	assetsDir := http.FileServer(http.FS(stripped))
-	serveMux.Handle("/", assetsDir)
-
-	if host != "localhost" {
-		// setting webhook
-		webHookUrl := fmt.Sprintf("https://%s/%s", host, token)
-		setWebHookUrl :=
-			fmt.Sprintf("%s/bot%s/%s?url=%s", gorun.TgApiUrl, token, gorun.TgMethodSetWebHook, webHookUrl)
-
-		log.Printf("url: %s\n", setWebHookUrl)
-
-		_, err := http.Get(setWebHookUrl)
-		if err != nil {
-			panic(err)
-		}
-
-		// listen messages handler
-		serveMux.HandleFunc(fmt.Sprintf("/%s", token), handler.TgWebHookHandler)
-	}
+	handler := rest.NewHandler(debug, tgToken, t, c, assets)
 
 	fmt.Printf("The server is on tap now on port: %s", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), serveMux))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), handler))
 }
 
 func isDebugMode(debug string) bool {
