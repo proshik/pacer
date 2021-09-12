@@ -28,6 +28,11 @@ import (
 var assets embed.FS
 
 func main() {
+	//
+	//dur, _ := time.ParseDuration("1h30m")
+	//
+	//fmt.Println(int(dur.Hours()))
+
 	// read environment variables
 	port := os.Getenv("PORT")
 	if port == "" {
