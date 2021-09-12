@@ -1,1 +1,1 @@
-web: bin/gorun
+web: gorun
