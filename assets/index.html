@@ -8,88 +8,69 @@
             go.run(result.instance);
         });
     </script>
-
-    <style>
-        .divTable {
-            display: table;
-        }
-
-        .divTableRow {
-            display: table-row;
-        }
-
-        .divTableCell, .divTableHead {
-            display: table-cell;
-            padding: 3px 10px;
-        }
-
-        .divTableCellDirectionButton {
-            text-align: center;
-        }
-
-        .divTableCellConvertButton {
-            border: 10px;
-            text-align: right
-        }
-
-        .divTableBody {
-            display: table-row-group;
-        }
-
-        .selectCurrency {
-            width: 120px;
-        }
-    </style>
-
-    <title>go-run</title>
+    <title>Pacer</title>
 </head>
 <body>
+<p style="margin-left: 10px;">
+    <b>Pacer</b>
+</p>
 
-<textarea id="jsoninput" name="jsoninput" cols="80" rows="20"></textarea>
-<input id="button" type="submit" name="button" value="pretty json" onclick="json(jsoninput.value)"/>
-<textarea id="jsonoutput" name="jsonoutput" cols="80" rows="20"></textarea>
-
+Дистанция
 <br/>
 <input id="distInput" type="number" style="-webkit-appearance: none; margin: 0;" name="distInput" value="21097"
        onkeyup="pace()"/>метров
-<input type="range" min="0" max="100000" id="line" oninput="testMy()" value="21097" style="width: 400px" onchange="pace()">
+<input type="range" min="0" max="100000" id="line" oninput="distRangeChange()" value="21097" style="width: 400px"
+       onchange="pace()">
 <br/>
 
+Время
+<br/>
 <input id="timeHourInput" type="number" name="timeHour" value="1" onkeyup="pace()">ч
 <input id="timeMinuteInput" type="number" name="timeMinute" value="25" onkeyup="pace()">м
 <input id="timeSecondInput" type="number" name="timeSecond" value="39" onkeyup="pace()">с
 <br/>
-<input id="paceMinuteInput" type="number" name="paceMinute" value="4">м
-<input id="paceSecondInput" type="number" name="paceSecond" value="4">с
+
+Темп
+<br/>
+<input id="paceMinuteInput" type="number" name="paceMinute" value="4" onkeyup="time()">м
+<input id="paceSecondInput" type="number" name="paceSecond" value="4" onkeyup="time()">с
 
 </body>
 <script>
-    var json = function (input) {
-        var result = formatJSON(input)
-        if ((result != null) && ('error' in result)) {
-            console.log("Go return value", result)
-            jsonoutput.value = ""
-            alert(result.error)
-        }
-    }
-
     const pace = function () {
-        distInputValue = document.getElementById("distInput").value;
+        let distInputValue = document.getElementById("distInput");
 
-        line = document.getElementById("line")
-        line.value = distInputValue
+        if (Number(distInputValue.value) === 0) {
+            return
+        }
+
+        if (Number(distInputValue.value) < 1) {
+            distInputValue.value = ""
+        }
+
+        let line = document.getElementById("line");
+
+        if (distInputValue.value === "") {
+            line.value = 0
+        } else {
+            line.value = distInputValue.value
+        }
 
         const result = calcPace();
-        // if ((result != null) && ('error' in result)) {
-        //     alert(result.error)
-        // }
 
         console.log("calcPace return value", result)
     };
 
-    function testMy() {
-        line = document.getElementById("line").value;
-        distInput = document.getElementById("distInput");
+    const time = function () {
+        const result = calcTime();
+
+        console.log("calcTime return value", result)
+    };
+
+    function distRangeChange() {
+        let line = document.getElementById("line").value;
+        let distInput = document.getElementById("distInput");
+
         distInput.value = line;
     }
 </script>
