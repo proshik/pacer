@@ -10,6 +10,14 @@ import (
 
 func paceWrapper(c *calculator.Service) js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		//if len(args) != 1 {
+		//	result := map[string]interface{}{
+		//		"error": "Invalid no of arguments passed",
+		//	}
+		//	return result
+		//}
+		//inputJSON := args[0].String()
+
 		jsDoc := js.Global().Get("document")
 		if !jsDoc.Truthy() {
 			result := map[string]interface{}{
