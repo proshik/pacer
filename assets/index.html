@@ -64,7 +64,7 @@
            onkeyup="pace()"/>метров
     <input type="range" min="0" max="100000" id="line" oninput="distRangeChange()" value="21097" style="width: 400px"
            onchange="pace()">
-<br/>
+    <br/>
 
     Время
     <br/>
@@ -82,34 +82,58 @@
 
 </body>
 <script>
-    const pace = function () {
-        let distInputValue = document.getElementById("distInput");
+    let pace = function () {
+        let distInputValue = document.getElementById("distInput").value;
 
-        if (Number(distInputValue.value) === 0) {
+        let dist = Number(distInputValue)
+        if (dist === 0) {
             return
         }
-
-        if (Number(distInputValue.value) < 1) {
-            distInputValue.value = ""
+        if (dist < 1) {
+            distInputValue = ""
         }
 
         let line = document.getElementById("line");
 
-        if (distInputValue.value === "") {
+        if (distInputValue === "") {
             line.value = 0
         } else {
-            line.value = distInputValue.value
+            line.value = distInputValue
         }
 
-        const result = calcPace();
+        let timeHourValue = document.getElementById("timeHourInput").value;
+        let timeMinuteValue = document.getElementById("timeMinuteInput").value;
+        let timeSecondValue = document.getElementById("timeSecondInput").value;
 
-        console.log("calcPace return value", result)
+        const result = calcPace(dist, timeHourValue, timeMinuteValue, timeSecondValue);
+        console.debug("calcPace result: ", result)
+
+        let jsonResult = JSON.parse(result)
+        if (jsonResult["error"] != null) {
+            console.error("calcPace execution error", jsonResult["error"])
+            return
+        }
+
+        let minute = jsonResult["minute"]
+        let second = jsonResult["second"]
+
+        document.getElementById("paceMinuteInput").value = minute
+        document.getElementById("paceSecondInput").value = second
+
+        console.log("success update pace")
     };
 
-    const time = function () {
-        const result = calcTime();
+    let time = function () {
+        let result = calcTime();
+        console.debug("calcTime result: ", result)
 
-        console.log("calcTime return value", result)
+        let jsonResult = JSON.parse(result)
+        if (jsonResult["error"] != null) {
+            console.error("calcPace execution error", jsonResult["error"])
+            return
+        }
+
+        console.log("success update time")
     };
 
     function distRangeChange() {

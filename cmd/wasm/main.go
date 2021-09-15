@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"gorun/pkg/calculator"
 	"strconv"
@@ -8,167 +9,94 @@ import (
 	"time"
 )
 
+const getElementById = "getElementById"
+
+type CalcResult struct {
+	Hour   string `json:"hour,omitempty"`
+	Minute string `json:"minute,omitempty"`
+	Second string `json:"second,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+var defaultError = `{ "error": "unexpected error" }`
+
 func paceWrapper(c *calculator.Service) js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		//if len(args) != 1 {
-		//	result := map[string]interface{}{
-		//		"error": "Invalid no of arguments passed",
-		//	}
-		//	return result
-		//}
-		//inputJSON := args[0].String()
-
-		jsDoc := js.Global().Get("document")
-		if !jsDoc.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get document object",
-			}
-			return result
+		if len(args) != 4 {
+			return buildErrorResult("Invalid of arguments passed, should 4")
 		}
-
-		distInput := jsDoc.Call("getElementById", "distInput")
-		if !distInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get distInput element",
-			}
-			return result
-		}
-
-		timeHourInput := jsDoc.Call("getElementById", "timeHourInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get timeHourInput element",
-			}
-			return result
-		}
-
-		timeMinuteInput := jsDoc.Call("getElementById", "timeMinuteInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get timeMinuteInput element",
-			}
-			return result
-		}
-
-		timeSecondInput := jsDoc.Call("getElementById", "timeSecondInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get timeSecondInput element",
-			}
-			return result
-		}
-
-		paceMinuteInput := jsDoc.Call("getElementById", "paceMinuteInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get paceMinuteInput element",
-			}
-			return result
-		}
-
-		paceSecondInput := jsDoc.Call("getElementById", "paceSecondInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get paceSecondInput element",
-			}
-			return result
-		}
-
-		dist, err := strconv.Atoi(distInput.Get("value").String())
-		if err != nil {
-			result := map[string]interface{}{
-				"error": "Distance value is not a numeric: " + distInput.String(),
-			}
-			return result
-		}
-
-		hours := timeHourInput.Get("value").String()
-		minutes := timeMinuteInput.Get("value").String()
-		seconds := timeSecondInput.Get("value").String()
+		dist := args[0].Int()
+		hours := args[1].String()
+		minutes := args[2].String()
+		seconds := args[3].String()
 
 		timeString := fmt.Sprintf("%sh%sm%ss", hours, minutes, seconds)
 
 		timeValue, err := time.ParseDuration(timeString)
 		if err != nil {
-			result := map[string]interface{}{
-				"error": "Can`t parse time to duration: " + timeString,
-			}
-			return result
+			return buildErrorResult("Can`t parse time to duration: " + timeString)
 		}
 
-		paceResult := c.Pace(dist, timeValue)
+		pace := c.Pace(dist, timeValue)
 
-		paceMinuteInput.Set("value", strconv.Itoa(int(paceResult.Minutes())%60))
-		paceSecondInput.Set("value", strconv.Itoa(int(paceResult.Seconds())%60))
-
-		return "pace result: " + paceResult.String()
+		return buildResult(pace)
 	})
+}
+
+func buildResult(result time.Duration) string {
+	hourR := strconv.Itoa(int(result.Hours()) % 60)
+	hourM := strconv.Itoa(int(result.Minutes()) % 60)
+	hourS := strconv.Itoa(int(result.Seconds()) % 60)
+
+	b, err := json.Marshal(CalcResult{hourR, hourM, hourS, ""})
+	if err != nil {
+		return defaultError
+	}
+
+	return string(b)
 }
 
 func timeWrapper(c *calculator.Service) js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		jsDoc := js.Global().Get("document")
 		if !jsDoc.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get document object",
-			}
-			return result
+			return buildErrorResult("Unable to get document object")
 		}
 
-		distInput := jsDoc.Call("getElementById", "distInput")
+		distInput := jsDoc.Call(getElementById, "distInput")
 		if !distInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get distInput element",
-			}
-			return result
+			return buildErrorResult("Unable to get distInput element")
 		}
 
-		timeHourInput := jsDoc.Call("getElementById", "timeHourInput")
+		timeHourInput := jsDoc.Call(getElementById, "timeHourInput")
 		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get timeHourInput element",
-			}
-			return result
+			return buildErrorResult("Unable to get timeHourInput element")
 		}
 
-		timeMinuteInput := jsDoc.Call("getElementById", "timeMinuteInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get timeMinuteInput element",
-			}
-			return result
+		timeMinuteInput := jsDoc.Call(getElementById, "timeMinuteInput")
+		if !timeMinuteInput.Truthy() {
+			return buildErrorResult("Unable to get timeMinuteInput element")
 		}
 
-		timeSecondInput := jsDoc.Call("getElementById", "timeSecondInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get timeSecondInput element",
-			}
-			return result
+		timeSecondInput := jsDoc.Call(getElementById, "timeSecondInput")
+		if !timeSecondInput.Truthy() {
+			return buildErrorResult("Unable to get timeSecondInput element")
 		}
 
-		paceMinuteInput := jsDoc.Call("getElementById", "paceMinuteInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get paceMinuteInput element",
-			}
-			return result
+		paceMinuteInput := jsDoc.Call(getElementById, "paceMinuteInput")
+		if !paceMinuteInput.Truthy() {
+			return buildErrorResult("Unable to get paceMinuteInput element")
 		}
 
-		paceSecondInput := jsDoc.Call("getElementById", "paceSecondInput")
-		if !timeHourInput.Truthy() {
-			result := map[string]interface{}{
-				"error": "Unable to get paceSecondInput element",
-			}
-			return result
+		paceSecondInput := jsDoc.Call(getElementById, "paceSecondInput")
+		if !paceSecondInput.Truthy() {
+			return buildErrorResult("Unable to get paceSecondInput element")
 		}
 
+		// convert distInput to int value
 		dist, err := strconv.Atoi(distInput.Get("value").String())
 		if err != nil {
-			result := map[string]interface{}{
-				"error": "Distance value is not a numeric: " + distInput.String(),
-			}
-			return result
+			return buildErrorResult("Distance value is not a numeric: " + distInput.String())
 		}
 
 		minutes := paceMinuteInput.Get("value").String()
@@ -178,20 +106,26 @@ func timeWrapper(c *calculator.Service) js.Func {
 
 		paceValue, err := time.ParseDuration(paceString)
 		if err != nil {
-			result := map[string]interface{}{
-				"error": "Can`t parse pace to duration: " + paceString,
-			}
-			return result
+			return buildErrorResult("Can`t parse pace to duration: " + paceString)
 		}
 
 		timeResult := c.Time(dist, paceValue)
 
-		timeMinuteInput.Set("value", strconv.Itoa(int(timeResult.Hours())%60))
+		timeHourInput.Set("value", strconv.Itoa(int(timeResult.Hours())%60))
 		timeMinuteInput.Set("value", strconv.Itoa(int(timeResult.Minutes())%60))
 		timeSecondInput.Set("value", strconv.Itoa(int(timeResult.Seconds())%60))
 
-		return "time result: " + timeResult.String()
+		return buildResult(timeResult)
 	})
+}
+
+func buildErrorResult(message string) string {
+	b, err := json.Marshal(CalcResult{"", "", "", message})
+	if err != nil {
+		return defaultError
+	}
+
+	return string(b)
 }
 
 func main() {
