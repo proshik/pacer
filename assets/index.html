@@ -16,68 +16,102 @@
             go.run(result.instance);
         });
     </script>
+
+    <style>
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+
     <title>Pacer</title>
 </head>
 <body>
-<!-- Optional JavaScript -->
-<!-- jQuery first, then Popper.js, then Bootstrap JS -->
-<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
-        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
-        crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js"
-        integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49"
-        crossorigin="anonymous"></script>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"
-        integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy"
-        crossorigin="anonymous"></script>
-<div class="container">
 
-    <p style="margin-left: 10px;">
-        <b>Pacer</b>
-    </p>
-
-    <div class="container">
-        <div class="row">
-            <div class="col">
-                1 of 2
-            </div>
-            <div class="col">
-                2 of 2
-            </div>
-        </div>
-        <div class="row">
-            <div class="col">
-                1 of 3
-            </div>
-            <div class="col">
-                2 of 3
-            </div>
-            <div class="col">
-                3 of 3
-            </div>
+<div class="container pt-3 my-3">
+    <div class="mb-4">
+        <div class="mx-auto">
+            <h1>Pacer</h1>
         </div>
     </div>
 
-    Дистанция
-    <br/>
-    <input id="distInput" type="number" style="-webkit-appearance: none; margin: 0;" name="distInput" value="21097"
-           onkeyup="pace()"/>метров
-    <input type="range" min="0" max="100000" id="line" oninput="distRangeChange()" value="21097" style="width: 400px"
-           onchange="pace()">
-    <br/>
-
-    Время
-    <br/>
-    <input id="timeHourInput" type="number" name="timeHour" value="1" onkeyup="pace()">ч
-    <input id="timeMinuteInput" type="number" name="timeMinute" value="25" onkeyup="pace()">м
-    <input id="timeSecondInput" type="number" name="timeSecond" value="39" onkeyup="pace()">с
-    <br/>
-
-    Темп
-    <br/>
-    <input id="paceMinuteInput" type="number" name="paceMinute" value="4" onkeyup="time()">м
-    <input id="paceSecondInput" type="number" name="paceSecond" value="4" onkeyup="time()">с
-    <!-- Content here -->
+    <form>
+        <div class="form-row">
+            <div class="form-group col-md-2">
+                <label for="distInput">Дистанция</label>
+                <div class="input-group">
+                    <input id="distInput" class="form-control" type="number"
+                           style="-webkit-appearance: none; margin: 0;" name="distInput" value="21097"
+                           onkeyup="pace()"/>
+                    <div class="input-group-append">
+                        <span class="input-group-text">метров</span>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group col-md-10">
+                <label for="line">&nbsp;</label>
+                <input id="line" class="form-control" type="range" min="0" max="160000" oninput="distRangeChange()"
+                       value="21097"
+                       onchange="pace()">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group col-md-1">
+                <label for="timeHourInput">Время</label>
+                <div class="input-group">
+                    <input id="timeHourInput" class="form-control" type="number" name="timeHour" value="1"
+                           onkeyup="pace()">
+                    <div class="input-group-append">
+                        <span class="input-group-text">ч</span>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group col-md-1">
+                <label for="timeHourInput">&nbsp;</label>
+                <div class="input-group">
+                    <input id="timeMinuteInput" class="form-control" type="number" name="timeMinute" value="25"
+                           onkeyup="pace()">
+                    <div class="input-group-append">
+                        <span class="input-group-text">м</span>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group col-md-1">
+                <label for="timeHourInput">&nbsp;</label>
+                <div class="input-group">
+                    <input id="timeSecondInput" class="form-control" type="number" name="timeSecond" value="39"
+                           onkeyup="pace()">
+                    <div class="input-group-append">
+                        <span class="input-group-text">с</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group col-md-1">
+                <label for="timeHourInput">Темп</label>
+                <div class="input-group">
+                    <input id="paceMinuteInput" class="form-control" type="number" name="paceMinute" value="4"
+                           onkeyup="time()">
+                    <div class="input-group-append">
+                        <span class="input-group-text">м</span>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group col-md-1">
+                <label for="timeHourInput">&nbsp;</label>
+                <div class="input-group">
+                    <input id="paceSecondInput" class="form-control" type="number" name="paceSecond" value="4"
+                           onkeyup="time()">
+                    <div class="input-group-append">
+                        <span class="input-group-text">с</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+</div>
+</form>
 </div>
 
 </body>
