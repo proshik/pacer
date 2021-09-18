@@ -9,6 +9,14 @@
           integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
     <meta charset="utf-8"/>
 
+    <!--Plugin CSS file with desired skin-->
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/ion-rangeslider/2.3.1/css/ion.rangeSlider.min.css"/>
+    <!--jQuery-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <!--Plugin JavaScript file-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ion-rangeslider/2.3.1/js/ion.rangeSlider.min.js"></script>
+
     <script src="wasm_exec.js"></script>
     <script>
         wasm_filename = "json.wasm";
@@ -64,6 +72,8 @@
         </div>
     </div>
 
+    <input type="text" class="js-range-slider" name="my_range" value=""/>
+
     <form>
         <div class="form-row">
             <div class="form-group col-md-2">
@@ -79,15 +89,16 @@
             </div>
             <div class="form-group col-md-10">
                 <label for="line">&nbsp;</label>
-                <input id="line" class="form-control disabled" type="range" min="0" max="160000" oninput="distRangeChange()"
+                <input id="line" class="form-control disabled" type="range" min="0" max="160000"
+                       oninput="distRangeChange()"
                        value="21097"
                        onchange="pace()" disabled>
             </div>
         </div>
-        <div class="form-row">
-            <div class="form-group col-md-1">
+        <div class="form-row d-inline-flex">
+            <div class="form-group col">
                 <label for="timeHourInput">Время</label>
-                <div class="input-group">
+                <div class="input-group" style="width: 83px">
                     <input id="timeHourInput" class="form-control disabled" type="number" name="timeHour" value="1"
                            onkeyup="pace()" disabled>
                     <div class="input-group-append">
@@ -95,9 +106,9 @@
                     </div>
                 </div>
             </div>
-            <div class="form-group col-md-1">
+            <div class="form-group col">
                 <label for="timeMinuteInput">&nbsp;</label>
-                <div class="input-group">
+                <div class="input-group" style="width: 83px">
                     <input id="timeMinuteInput" class="form-control disabled" type="number" name="timeMinute" value="25"
                            onkeyup="pace()" disabled>
                     <div class="input-group-append">
@@ -105,9 +116,9 @@
                     </div>
                 </div>
             </div>
-            <div class="form-group col-md-1">
+            <div class="form-group col">
                 <label for="timeSecondInput">&nbsp;</label>
-                <div class="input-group">
+                <div class="input-group" style="width: 83px">
                     <input id="timeSecondInput" class="form-control disabled" type="number" name="timeSecond" value="39"
                            onkeyup="pace()" disabled>
                     <div class="input-group-append">
@@ -116,10 +127,11 @@
                 </div>
             </div>
         </div>
-        <div class="form-row">
-            <div class="form-group col-md-1">
+        <br/>
+        <div class="form-row d-inline-flex">
+            <div class="form-group col">
                 <label for="paceMinuteInput">Темп</label>
-                <div class="input-group">
+                <div class="input-group" style="width: 83px">
                     <input id="paceMinuteInput" class="form-control disabled" type="number" name="paceMinute" value="4"
                            onkeyup="time()" disabled>
                     <div class="input-group-append">
@@ -127,9 +139,9 @@
                     </div>
                 </div>
             </div>
-            <div class="form-group col-md-1">
+            <div class="form-group col">
                 <label for="paceSecondInput">&nbsp;</label>
-                <div class="input-group">
+                <div class="input-group" style="width: 83px">
                     <input id="paceSecondInput" class="form-control disabled" type="number" name="paceSecond" value="4"
                            onkeyup="time()" disabled>
                     <div class="input-group-append">
@@ -144,6 +156,38 @@
 
 </body>
 <script>
+    function my_prettify(n) {
+        var num = Math.log2(n);
+        return n + " → " + (+num.toFixed(3));
+    }
+
+
+    $(".js-range-slider").ionRangeSlider({
+        skin: "big",
+        min: 0,
+        grid: true,
+        grid_snap: false,
+        grid_num: 10,
+        from: 21097,
+        max: 160934,
+        step: 1,
+    });
+    // $(".js-range-slider").ionRangeSlider({
+    //     skin: "big",
+    //     // min: 0,
+    //     grid: true,
+    //     // grid_num: 10,
+    //     grid_snap: false,
+    //     from: 5,
+    //     max: 160934,
+    //     step: 1,
+    //     values: [
+    //         0, 1000, 3000, 5000, 10000, 21097, 42195,
+    //         50000, 804672, 100000, 160934
+    //     ]
+    // });
+
+
     let pace = function () {
         let distInputValue = document.getElementById("distInput").value;
 
