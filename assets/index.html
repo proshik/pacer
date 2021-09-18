@@ -11,10 +11,38 @@
 
     <script src="wasm_exec.js"></script>
     <script>
-        const go = new Go();
-        WebAssembly.instantiateStreaming(fetch("json.wasm"), go.importObject).then((result) => {
-            go.run(result.instance);
-        });
+        wasm_filename = "json.wasm";
+
+        function message(s) {
+            document.getElementById("message").textContent = s;
+        }
+
+        function load_wasm() {
+            if (!WebAssembly.instantiateStreaming) { // polyfill
+                WebAssembly.instantiateStreaming = async (resp, importObject) => {
+                    const source = await (await resp).arrayBuffer();
+                    return await WebAssembly.instantiate(source, importObject);
+                };
+            }
+
+            const go = new Go();
+
+            WebAssembly.instantiateStreaming(fetch(wasm_filename), go.importObject)
+                .then(results => {
+                    go.run(results.instance);
+
+                    let slides = document.getElementsByClassName("disabled");
+                    for (let i = 0; i < slides.length; i++) {
+                        slides.item(i).disabled = false;
+                    }
+                })
+                .catch((err) => {
+                    message("Error Loading WebAssembly - " + err);
+                    alert(err);
+                });
+        }
+
+        load_wasm()
     </script>
 
     <style>
@@ -41,9 +69,9 @@
             <div class="form-group col-md-2">
                 <label for="distInput">Дистанция</label>
                 <div class="input-group">
-                    <input id="distInput" class="form-control" type="number"
+                    <input id="distInput" class="form-control disabled" type="number"
                            style="-webkit-appearance: none; margin: 0;" name="distInput" value="21097"
-                           onkeyup="pace()"/>
+                           onkeyup="pace()" disabled/>
                     <div class="input-group-append">
                         <span class="input-group-text">метров</span>
                     </div>
@@ -51,37 +79,37 @@
             </div>
             <div class="form-group col-md-10">
                 <label for="line">&nbsp;</label>
-                <input id="line" class="form-control" type="range" min="0" max="160000" oninput="distRangeChange()"
+                <input id="line" class="form-control disabled" type="range" min="0" max="160000" oninput="distRangeChange()"
                        value="21097"
-                       onchange="pace()">
+                       onchange="pace()" disabled>
             </div>
         </div>
         <div class="form-row">
             <div class="form-group col-md-1">
                 <label for="timeHourInput">Время</label>
                 <div class="input-group">
-                    <input id="timeHourInput" class="form-control" type="number" name="timeHour" value="1"
-                           onkeyup="pace()">
+                    <input id="timeHourInput" class="form-control disabled" type="number" name="timeHour" value="1"
+                           onkeyup="pace()" disabled>
                     <div class="input-group-append">
                         <span class="input-group-text">ч</span>
                     </div>
                 </div>
             </div>
             <div class="form-group col-md-1">
-                <label for="timeHourInput">&nbsp;</label>
+                <label for="timeMinuteInput">&nbsp;</label>
                 <div class="input-group">
-                    <input id="timeMinuteInput" class="form-control" type="number" name="timeMinute" value="25"
-                           onkeyup="pace()">
+                    <input id="timeMinuteInput" class="form-control disabled" type="number" name="timeMinute" value="25"
+                           onkeyup="pace()" disabled>
                     <div class="input-group-append">
                         <span class="input-group-text">м</span>
                     </div>
                 </div>
             </div>
             <div class="form-group col-md-1">
-                <label for="timeHourInput">&nbsp;</label>
+                <label for="timeSecondInput">&nbsp;</label>
                 <div class="input-group">
-                    <input id="timeSecondInput" class="form-control" type="number" name="timeSecond" value="39"
-                           onkeyup="pace()">
+                    <input id="timeSecondInput" class="form-control disabled" type="number" name="timeSecond" value="39"
+                           onkeyup="pace()" disabled>
                     <div class="input-group-append">
                         <span class="input-group-text">с</span>
                     </div>
@@ -90,20 +118,20 @@
         </div>
         <div class="form-row">
             <div class="form-group col-md-1">
-                <label for="timeHourInput">Темп</label>
+                <label for="paceMinuteInput">Темп</label>
                 <div class="input-group">
-                    <input id="paceMinuteInput" class="form-control" type="number" name="paceMinute" value="4"
-                           onkeyup="time()">
+                    <input id="paceMinuteInput" class="form-control disabled" type="number" name="paceMinute" value="4"
+                           onkeyup="time()" disabled>
                     <div class="input-group-append">
                         <span class="input-group-text">м</span>
                     </div>
                 </div>
             </div>
             <div class="form-group col-md-1">
-                <label for="timeHourInput">&nbsp;</label>
+                <label for="paceSecondInput">&nbsp;</label>
                 <div class="input-group">
-                    <input id="paceSecondInput" class="form-control" type="number" name="paceSecond" value="4"
-                           onkeyup="time()">
+                    <input id="paceSecondInput" class="form-control disabled" type="number" name="paceSecond" value="4"
+                           onkeyup="time()" disabled>
                     <div class="input-group-append">
                         <span class="input-group-text">с</span>
                     </div>
@@ -139,22 +167,27 @@
         let timeMinuteValue = document.getElementById("timeMinuteInput").value;
         let timeSecondValue = document.getElementById("timeSecondInput").value;
 
-        const result = calcPace(dist, timeHourValue, timeMinuteValue, timeSecondValue);
-        console.debug("calcPace result: ", result)
+        try {
 
-        let jsonResult = JSON.parse(result)
-        if (jsonResult["error"] != null) {
-            console.error("calcPace execution error", jsonResult["error"])
-            return
+            const result = calcPace(dist, timeHourValue, timeMinuteValue, timeSecondValue);
+
+            let jsonResult = JSON.parse(result)
+            if (jsonResult["error"] != null) {
+                console.error("calcPace execution error", jsonResult["error"])
+                return
+            }
+
+            let minute = jsonResult["minute"]
+            let second = jsonResult["second"]
+
+            document.getElementById("paceMinuteInput").value = minute
+            document.getElementById("paceSecondInput").value = second
+
+            console.log("success update pace")
+        } catch (e) {
+            // инструкции для обработки ошибок
+            alert(e); // передать объект исключения обработчику ошибок
         }
-
-        let minute = jsonResult["minute"]
-        let second = jsonResult["second"]
-
-        document.getElementById("paceMinuteInput").value = minute
-        document.getElementById("paceSecondInput").value = second
-
-        console.log("success update pace")
     };
 
     let time = function () {

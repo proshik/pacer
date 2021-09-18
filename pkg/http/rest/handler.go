@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"github.com/NYTimes/gziphandler"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"gorun/pkg/calculator"
 	"gorun/pkg/telegram"
@@ -39,7 +40,7 @@ func NewHandler(
 		log.Fatalln(err)
 	}
 
-	assetsDir := http.FileServer(http.FS(stripped))
+	assetsDir := gziphandler.GzipHandler(http.FileServer(http.FS(stripped)))
 	serveMux.Handle("/", assetsDir)
 
 	return serveMux
