@@ -8,15 +8,14 @@
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
           integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
     <meta charset="utf-8"/>
-
-    <!--Plugin CSS file with desired skin-->
+    <!-- Plugin CSS file with desired skin -->
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/ion-rangeslider/2.3.1/css/ion.rangeSlider.min.css"/>
-    <!--jQuery-->
+    <!-- jQuery -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <!--Plugin JavaScript file-->
+    <!-- Plugin JavaScript file -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ion-rangeslider/2.3.1/js/ion.rangeSlider.min.js"></script>
-
+    <!-- Wasm js -->
     <script src="wasm_exec.js"></script>
     <script>
         wasm_filename = "json.wasm";
@@ -45,7 +44,7 @@
                     }
                 })
                 .catch((err) => {
-                    message("Error Loading WebAssembly - " + err);
+                    // message("Error Loading WebAssembly - " + err);
                     alert(err);
                 });
         }
@@ -72,8 +71,6 @@
         </div>
     </div>
 
-    <input type="text" class="js-range-slider" name="my_range" value=""/>
-
     <form>
         <div class="form-row">
             <div class="form-group col-md-2">
@@ -87,12 +84,18 @@
                     </div>
                 </div>
             </div>
-            <div class="form-group col-md-10">
-                <label for="line">&nbsp;</label>
-                <input id="line" class="form-control disabled" type="range" min="0" max="160000"
-                       oninput="distRangeChange()"
-                       value="21097"
-                       onchange="pace()" disabled>
+            <div class="form-group col-md-8">
+                <button type="button" class="btn btn-primary btn-sm mb-2">1 км</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">3 км</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">5 км</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">10 км</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">Half Marathon</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">Marathon</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">50 км</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">50 миль</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">100 км</button>
+                <button type="button" class="btn btn-primary btn-sm mb-2">100 миль</button>
+                <input type="text" class="form-control disabled" id="slider" name="my_range" disabled/>
             </div>
         </div>
         <div class="form-row d-inline-flex">
@@ -150,61 +153,44 @@
                 </div>
             </div>
         </div>
-</div>
-</form>
+    </form>
 </div>
 
 </body>
 <script>
-    function my_prettify(n) {
-        var num = Math.log2(n);
-        return n + " → " + (+num.toFixed(3));
-    }
+    let slider = $("#slider")
 
-
-    $(".js-range-slider").ionRangeSlider({
-        skin: "big",
+    slider.ionRangeSlider({
+        skin: "round",
         min: 0,
         grid: true,
         grid_snap: false,
-        grid_num: 10,
+        grid_num: 5,
         from: 21097,
         max: 160934,
         step: 1,
+        onChange: function () {
+            distRangeChange()
+            pace()
+        }
     });
-    // $(".js-range-slider").ionRangeSlider({
-    //     skin: "big",
-    //     // min: 0,
-    //     grid: true,
-    //     // grid_num: 10,
-    //     grid_snap: false,
-    //     from: 5,
-    //     max: 160934,
-    //     step: 1,
-    //     values: [
-    //         0, 1000, 3000, 5000, 10000, 21097, 42195,
-    //         50000, 804672, 100000, 160934
-    //     ]
-    // });
 
+    let instance = slider.data("ionRangeSlider");
+
+    let distInput = document.getElementById("distInput");
+
+    distInput.addEventListener('input', () => {
+        instance.update({
+            from: distInput.value
+        });
+    });
 
     let pace = function () {
-        let distInputValue = document.getElementById("distInput").value;
+        let distInputValue = distInput.value
 
         let dist = Number(distInputValue)
         if (dist === 0) {
             return
-        }
-        if (dist < 1) {
-            distInputValue = ""
-        }
-
-        let line = document.getElementById("line");
-
-        if (distInputValue === "") {
-            line.value = 0
-        } else {
-            line.value = distInputValue
         }
 
         let timeHourValue = document.getElementById("timeHourInput").value;
@@ -212,7 +198,6 @@
         let timeSecondValue = document.getElementById("timeSecondInput").value;
 
         try {
-
             const result = calcPace(dist, timeHourValue, timeMinuteValue, timeSecondValue);
 
             let jsonResult = JSON.parse(result)
@@ -248,10 +233,10 @@
     };
 
     function distRangeChange() {
-        let line = document.getElementById("line").value;
+        let slider = document.getElementById("slider").value;
         let distInput = document.getElementById("distInput");
 
-        distInput.value = line;
+        distInput.value = slider;
     }
 </script>
 
