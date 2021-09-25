@@ -20,6 +20,7 @@ type CalcResult struct {
 
 var defaultError = `{ "error": "unexpected error" }`
 
+// got input values from arguments of the function
 func paceWrapper(c *calculator.Service) js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		if len(args) != 4 {
@@ -56,6 +57,7 @@ func buildResult(result time.Duration) string {
 	return string(b)
 }
 
+// got values from value of document elements
 func timeWrapper(c *calculator.Service) js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		jsDoc := js.Global().Get("document")

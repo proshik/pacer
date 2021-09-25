@@ -148,9 +148,10 @@ func calculatePace(c *calculator.Service) func(w http.ResponseWriter, r *http.Re
 
 func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		//func (h *Handler) TgWebHookHandler(_ http.ResponseWriter, r *http.Request) {
 		data, err := ioutil.ReadAll(r.Body)
+
 		defer r.Body.Close()
+
 		if err != nil {
 			log.Println(err)
 			return
