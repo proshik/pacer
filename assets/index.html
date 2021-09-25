@@ -85,16 +85,18 @@
                 </div>
             </div>
             <div class="form-group col-md-8">
-                <button type="button" class="btn btn-primary btn-sm mb-2">1 км</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">3 км</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">5 км</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">10 км</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">Half Marathon</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">Marathon</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">50 км</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">50 миль</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">100 км</button>
-                <button type="button" class="btn btn-primary btn-sm mb-2">100 миль</button>
+                <button type="button" id="b1km" value="1000" class="btn btn-primary btn-sm mb-2">1 км</button>
+                <button type="button" id="b3km" value="3000" class="btn btn-primary btn-sm mb-2">3 км</button>
+                <button type="button" id="b5km" value="5000" class="btn btn-primary btn-sm mb-2">5 км</button>
+                <button type="button" id="b10km" value="10000" class="btn btn-primary btn-sm mb-2">10 км</button>
+                <button type="button" id="b21km" value="21097" class="btn btn-primary btn-sm mb-2">Half Marathon
+                </button>
+                <button type="button" id="b42km" value="42195" class="btn btn-primary btn-sm mb-2">Marathon</button>
+                <button type="button" id="b50km" value="50000" class="btn btn-primary btn-sm mb-2">50 км</button>
+                <button type="button" id="b50mile" value="80467" class="btn btn-primary btn-sm mb-2">50 миль</button>
+                <button type="button" id="b100km" value="100000" class="btn btn-primary btn-sm mb-2">100 км</button>
+                <button type="button" id="b100mile" value="160934" class="btn btn-primary btn-sm mb-2">100 миль</button>
+
                 <input type="text" class="form-control disabled" id="slider" name="my_range" disabled/>
             </div>
         </div>
@@ -158,6 +160,7 @@
 
 </body>
 <script>
+    // grid
     let slider = $("#slider")
 
     slider.ionRangeSlider({
@@ -170,20 +173,24 @@
         max: 160934,
         step: 1,
         onChange: function () {
-            distRangeChange()
-            pace()
+            refreshDist();
         }
     });
 
     let instance = slider.data("ionRangeSlider");
 
+    // distance input
     let distInput = document.getElementById("distInput");
-
     distInput.addEventListener('input', () => {
         instance.update({
             from: distInput.value
         });
     });
+
+    function refreshDist() {
+        distRangeChange();
+        pace();
+    }
 
     let pace = function () {
         let distInputValue = distInput.value
@@ -238,6 +245,20 @@
 
         distInput.value = slider;
     }
+
+    // distance buttons
+    const buttons = ['b1km', 'b3km', 'b5km', 'b10km', 'b21km', 'b42km', 'b50km', 'b50mile', 'b100km', 'b100mile'];
+
+    buttons.forEach(element => {
+        let but = document.getElementById(element);
+
+        but.addEventListener("click", function () {
+            instance.update({
+                from: but.value
+            });
+            refreshDist();
+        });
+    });
 </script>
 
 </html>
