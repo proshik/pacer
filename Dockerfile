@@ -6,6 +6,8 @@ COPY go.mod ./
 COPY go.sum ./
 RUN go mod download
 COPY . ./
-RUN echo $HOST,
+ARG HOST="Default_Value"
+ARG PORT="Default_Value"
+ARG TELEGRAM_TOKEN="Default_Value"
 RUN go build -o /pacer
 CMD [ "/" ]
