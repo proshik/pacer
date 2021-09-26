@@ -11,4 +11,4 @@ RUN go mod download
 COPY . ./
 RUN go build -o /pacer
 EXPOSE 80
-CMD [ "/" ]
+CMD [ "/pacer" ]
