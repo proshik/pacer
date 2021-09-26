@@ -6,5 +6,6 @@ COPY go.mod ./
 COPY go.sum ./
 RUN go mod download
 COPY . ./
+RUN echo $HOST,
 RUN go build -o /pacer
 CMD [ "/" ]
