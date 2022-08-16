@@ -57,4 +57,4 @@ jobs:
         with:
           push: true
 #          file: Dockerfile
-          tags: pacer:latest
+          tags: proshik/pacer:latest
