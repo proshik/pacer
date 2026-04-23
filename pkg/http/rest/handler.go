@@ -1,30 +1,34 @@
 package rest
 
 import (
-	"embed"
 	"encoding/json"
 	"fmt"
 	"github.com/NYTimes/gziphandler"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"gorun/pkg/calculator"
 	"gorun/pkg/telegram"
+	"io"
 	"io/fs"
-	"io/ioutil"
-	"log"
+	"log/slog"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 )
+
+type errorResponse struct {
+	Error   string            `json:"error"`
+	Details map[string]string `json:"details,omitempty"`
+}
 
 func NewHandler(
 	debugMode bool,
 	tgToken string,
 	t *telegram.Service,
 	c *calculator.Service,
-	a embed.FS,
-) *http.ServeMux {
+	a fs.FS,
+) (*http.ServeMux, error) {
 	serveMux := http.NewServeMux()
+	serveMux.HandleFunc("/healthz", healthCheck)
 
 	if debugMode {
 		// debug endpoints
@@ -37,13 +41,13 @@ func NewHandler(
 
 	stripped, err := fs.Sub(a, "assets")
 	if err != nil {
-		log.Fatalln(err)
+		return nil, fmt.Errorf("open embedded assets subfs: %w", err)
 	}
 
 	assetsDir := gziphandler.GzipHandler(http.FileServer(http.FS(stripped)))
 	serveMux.Handle("/", assetsDir)
 
-	return serveMux
+	return serveMux, nil
 }
 
 // calculateTime http://localhost:8080/time?pace=4m50s&dist=21095
@@ -51,47 +55,37 @@ func calculateTime(c *calculator.Service) func(w http.ResponseWriter, r *http.Re
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 
-		// validate query params
-		errs := url.Values{}
+		details := map[string]string{}
 		distValue := query.Get("dist")
 		if distValue == "" {
-			errs.Add("dist", "field is required")
+			details["dist"] = "field is required"
 		}
 
 		paceValue := query.Get("pace")
 		if paceValue == "" {
-			errs.Add("pace", "field is required")
+			details["pace"] = "field is required"
 		}
 
-		dist, err := strconv.Atoi(distValue)
-		if err != nil {
-			errs.Add("dist", "incorrect type should be number")
+		dist, distErr := strconv.Atoi(distValue)
+		if distErr != nil {
+			details["dist"] = "incorrect type should be number"
+		} else if dist <= 0 {
+			details["dist"] = "value should be greater than zero"
 		}
 
-		paceDuration, err := time.ParseDuration(paceValue)
-		if err != nil {
-			errs.Add("pace", err.Error())
+		paceDuration, paceErr := time.ParseDuration(paceValue)
+		if paceErr != nil {
+			details["pace"] = paceErr.Error()
 		}
 
-		// TODO figure out it
-		if &paceDuration == nil {
-			errs.Add("pace", "parsed value is nil")
-		}
-
-		if len(errs) > 0 {
-			w.Header().Set("Content-type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			err := json.NewEncoder(w).Encode(errs)
-			if err != nil {
-				log.Printf("Error on build json error: %v", err)
-				w.WriteHeader(http.StatusInternalServerError)
-			}
-
+		if len(details) > 0 {
+			writeJSONError(w, http.StatusBadRequest, "validation failed", details)
 			return
 		}
 
 		result := c.Time(dist, paceDuration)
 
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(result.String()))
 	}
 }
@@ -101,69 +95,83 @@ func calculatePace(c *calculator.Service) func(w http.ResponseWriter, r *http.Re
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 
-		// validate query params
-		errs := url.Values{}
+		details := map[string]string{}
 		distValue := query.Get("dist")
 		if distValue == "" {
-			errs.Add("dist", "field is required")
+			details["dist"] = "field is required"
 		}
 
 		timeValue := query.Get("time")
 		if timeValue == "" {
-			errs.Add("time", "field is required")
+			details["time"] = "field is required"
 		}
 
-		dist, err := strconv.Atoi(distValue)
-		if err != nil {
-			errs.Add("dist", "incorrect type should be number")
+		dist, distErr := strconv.Atoi(distValue)
+		if distErr != nil {
+			details["dist"] = "incorrect type should be number"
+		} else if dist <= 0 {
+			details["dist"] = "value should be greater than zero"
 		}
 
-		timeDuration, err := time.ParseDuration(timeValue)
-		if err != nil {
-			errs.Add("time", err.Error())
+		timeDuration, timeErr := time.ParseDuration(timeValue)
+		if timeErr != nil {
+			details["time"] = timeErr.Error()
 		}
 
-		// TODO figure out it
-		if &timeDuration == nil {
-			errs.Add("pace", "parsed value is nil")
-		}
-
-		if len(errs) > 0 {
-			w.Header().Set("Content-type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			err := json.NewEncoder(w).Encode(errs)
-			if err != nil {
-				log.Printf("Error on build json error: %v", err)
-				w.WriteHeader(http.StatusInternalServerError)
-			}
-
+		if len(details) > 0 {
+			writeJSONError(w, http.StatusBadRequest, "validation failed", details)
 			return
 		}
 
 		result := c.Pace(dist, timeDuration)
 
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(result.String()))
 	}
 }
 
 func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		data, err := ioutil.ReadAll(r.Body)
-
 		defer r.Body.Close()
 
+		data, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.Println(err)
+			slog.Warn("read webhook body failed", "err", err, "remote_addr", r.RemoteAddr)
+			writeJSONError(w, http.StatusBadRequest, "invalid request body", nil)
 			return
 		}
 
 		var update tgbotapi.Update
-		err = json.Unmarshal(data, &update)
-		if err != nil {
-			log.Println(err)
+		if err = json.Unmarshal(data, &update); err != nil {
+			slog.Warn("decode webhook update failed", "err", err, "remote_addr", r.RemoteAddr)
+			writeJSONError(w, http.StatusBadRequest, "invalid telegram update payload", nil)
+			return
+		}
+
+		if t == nil {
+			slog.Error("telegram service unavailable while handling webhook")
+			writeJSONError(w, http.StatusServiceUnavailable, "telegram service unavailable", nil)
 			return
 		}
 
 		t.DoUpdate(update)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}
+}
+
+func healthCheck(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func writeJSONError(w http.ResponseWriter, statusCode int, message string, details map[string]string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(errorResponse{
+		Error:   message,
+		Details: details,
+	}); err != nil {
+		slog.Error("encode json error response failed", "err", err, "status_code", statusCode)
 	}
 }

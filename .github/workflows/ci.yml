@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./ ./pkg/...
+
+      - name: Vet
+        run: go vet ./ ./pkg/...
+
+      - name: Build WASM
+        run: ./build.sh
+
+      - name: Build app
+        run: go build ./ ./pkg/...
+
+      - name: Build Docker image
+        run: docker build -t gorun-ci .

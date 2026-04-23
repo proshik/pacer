@@ -1,15 +1,21 @@
 package main
 
 import (
+	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"gorun/pkg/calculator"
 	"gorun/pkg/http/rest"
 	"gorun/pkg/telegram"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"strings"
+	"syscall"
+	"time"
 )
 
 // 1. забираю из переменных значения порта, токена, хоста, признак локальная тачка или нет.
@@ -28,44 +34,205 @@ import (
 var assets embed.FS
 
 func main() {
-	// read environment variables
-	port := os.Getenv("PORT")
-	if port == "" {
-		log.Fatal("PORT must be set")
+	if err := loadDotEnvIfExists(".env"); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "unable to load .env: %v\n", err)
+		os.Exit(1)
 	}
 
-	tgToken := os.Getenv("TELEGRAM_TOKEN")
-	if tgToken == "" {
-		log.Fatal("TELEGRAM_TOKEN must be set")
+	debug, debugParseErr := parseDebugMode(os.Getenv("DEBUG"))
+	logger, effectiveLevel, logLevelParseErr := newLogger(os.Getenv("LOG_LEVEL"), debug)
+	slog.SetDefault(logger)
+
+	if debugParseErr != nil {
+		slog.Warn("invalid DEBUG value, fallback to false", "value", os.Getenv("DEBUG"))
 	}
 
-	host := os.Getenv("HOST")
-	if host == "" {
-		log.Fatal("HOST must be set")
+	if logLevelParseErr != nil {
+		slog.Warn("invalid LOG_LEVEL value, fallback to default", "value", os.Getenv("LOG_LEVEL"), "fallback_level", effectiveLevel.String())
 	}
 
-	debugValue := os.Getenv("DEBUG")
-	debug := isDebugMode(debugValue)
+	port, err := requiredEnv("PORT")
+	if err != nil {
+		slog.Error("startup failed", "err", err)
+		os.Exit(1)
+	}
+
+	tgToken, err := requiredEnv("TELEGRAM_TOKEN")
+	if err != nil {
+		slog.Error("startup failed", "err", err)
+		os.Exit(1)
+	}
+
+	host, err := requiredEnv("HOST")
+	if err != nil {
+		slog.Error("startup failed", "err", err)
+		os.Exit(1)
+	}
 
 	c := calculator.NewService()
-	t := telegram.NewService(debug, host, tgToken, c)
+	t, err := telegram.NewService(debug, host, tgToken, c)
+	if err != nil {
+		slog.Error("telegram service init failed", "err", err)
+		os.Exit(1)
+	}
 
-	handler := rest.NewHandler(debug, tgToken, t, c, assets)
+	handler, err := rest.NewHandler(debug, tgToken, t, c, assets)
+	if err != nil {
+		slog.Error("http handler init failed", "err", err)
+		os.Exit(1)
+	}
 
-	fmt.Printf("The server is on tap now on port: %s", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), handler))
+	addr := fmt.Sprintf(":%s", port)
+	slog.Info("server starting", "addr", addr, "debug", debug)
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- server.ListenAndServe()
+	}()
+
+	shutdownSignals, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
+	select {
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server stopped unexpectedly", "err", err)
+			os.Exit(1)
+		}
+		slog.Info("server stopped")
+		return
+	case <-shutdownSignals.Done():
+		slog.Info("shutdown signal received")
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("http shutdown failed", "err", err)
+	} else {
+		slog.Info("http server stopped")
+	}
+
+	if err := t.Close(shutdownCtx); err != nil {
+		slog.Error("telegram shutdown failed", "err", err)
+	} else {
+		slog.Info("telegram service closed")
+	}
+
+	if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("server returned error after shutdown", "err", err)
+		os.Exit(1)
+	}
+
+	slog.Info("shutdown complete")
 }
 
-func isDebugMode(debug string) bool {
-	var debugMode bool
-	if debug != "" {
-		debugModeValue, err := strconv.ParseBool(debug)
-		if err != nil {
-			panic(err)
-		}
-		debugMode = debugModeValue
-	} else {
-		debugMode = false
+func requiredEnv(key string) (string, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return "", fmt.Errorf("%s must be set", key)
 	}
-	return debugMode
+
+	return value, nil
+}
+
+func parseDebugMode(debugValue string) (bool, error) {
+	if debugValue == "" {
+		return false, nil
+	}
+
+	debugMode, err := strconv.ParseBool(debugValue)
+	if err != nil {
+		return false, err
+	}
+
+	return debugMode, nil
+}
+
+func newLogger(logLevelValue string, debug bool) (*slog.Logger, slog.Level, error) {
+	level := slog.LevelInfo
+	if debug {
+		level = slog.LevelDebug
+	}
+
+	var parseErr error
+	if strings.TrimSpace(logLevelValue) != "" {
+		switch strings.ToLower(strings.TrimSpace(logLevelValue)) {
+		case "debug":
+			level = slog.LevelDebug
+		case "info":
+			level = slog.LevelInfo
+		case "warn", "warning":
+			level = slog.LevelWarn
+		case "error":
+			level = slog.LevelError
+		default:
+			parseErr = fmt.Errorf("unknown LOG_LEVEL: %q", logLevelValue)
+		}
+	}
+
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	})
+
+	return slog.New(handler), level, parseErr
+}
+
+func loadDotEnvIfExists(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			return fmt.Errorf("invalid .env line %d: %q", i+1, line)
+		}
+
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return fmt.Errorf("empty key in .env line %d", i+1)
+		}
+
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 {
+			if value[0] == '"' && value[len(value)-1] == '"' {
+				value = value[1 : len(value)-1]
+			}
+			if value[0] == '\'' && value[len(value)-1] == '\'' {
+				value = value[1 : len(value)-1]
+			}
+		}
+
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("set env %s from .env line %d: %w", key, i+1, err)
+		}
+	}
+
+	return nil
 }

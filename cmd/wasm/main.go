@@ -1,3 +1,6 @@
+//go:build js && wasm
+// +build js,wasm
+
 package main
 
 import (
@@ -27,6 +30,10 @@ func paceWrapper(c *calculator.Service) js.Func {
 			return buildErrorResult("Invalid of arguments passed, should 4")
 		}
 		dist := args[0].Int()
+		if dist <= 0 {
+			return buildErrorResult("Distance value should be greater than zero")
+		}
+
 		hours := args[1].String()
 		minutes := args[2].String()
 		seconds := args[3].String()
@@ -45,11 +52,16 @@ func paceWrapper(c *calculator.Service) js.Func {
 }
 
 func buildResult(result time.Duration) string {
-	hourR := strconv.Itoa(int(result.Hours()) % 60)
-	hourM := strconv.Itoa(int(result.Minutes()) % 60)
-	hourS := strconv.Itoa(int(result.Seconds()) % 60)
+	totalSeconds := int(result.Seconds())
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds % 3600) / 60
+	seconds := totalSeconds % 60
 
-	b, err := json.Marshal(CalcResult{hourR, hourM, hourS, ""})
+	b, err := json.Marshal(CalcResult{
+		Hour:   strconv.Itoa(hours),
+		Minute: strconv.Itoa(minutes),
+		Second: strconv.Itoa(seconds),
+	})
 	if err != nil {
 		return defaultError
 	}
@@ -100,15 +112,27 @@ func timeWrapper(c *calculator.Service) js.Func {
 		if err != nil {
 			return buildErrorResult("Distance value is not a numeric: " + distInput.String())
 		}
+		if dist <= 0 {
+			return buildErrorResult("Distance value should be greater than zero")
+		}
 
 		minutes := paceMinuteInput.Get("value").String()
 		seconds := paceSecondInput.Get("value").String()
+		if minutes == "" {
+			minutes = "0"
+		}
+		if seconds == "" {
+			seconds = "0"
+		}
 
 		paceString := fmt.Sprintf("%sm%ss", minutes, seconds)
 
 		paceValue, err := time.ParseDuration(paceString)
 		if err != nil {
 			return buildErrorResult("Can`t parse pace to duration: " + paceString)
+		}
+		if paceValue <= 0 {
+			return buildErrorResult("Pace should be greater than zero")
 		}
 
 		timeResult := c.Time(dist, paceValue)

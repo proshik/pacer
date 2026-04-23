@@ -1,0 +1,16 @@
+.git
+.github
+.idea
+
+.env
+.env.*
+!.env.example
+
+.cache
+*.log
+
+gorun
+
+README.md
+AGENTS.md
+PLAN.md
