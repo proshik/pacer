@@ -60,6 +60,11 @@
 - [x] Add managed Telegram service lifecycle with `Close(ctx)` to stop polling and worker goroutines.
 - [x] Ensure coordinated shutdown sequence logs completion and error states.
 
+### 11) GitHub Workflows Refresh
+- [x] Consolidate CI and Docker workflows into one maintained workflow file.
+- [x] Update action versions to current majors and remove deprecated workflow patterns.
+- [x] Align triggers with active branches (`master` + `main`) and tagged release publishing (`v*`).
+
 ## Validation
 - [x] Run: `go test ./ ./pkg/...`
 - [x] Run: `go vet ./ ./pkg/...`
@@ -86,4 +91,5 @@
 - 2026-04-23: Modernized logging with `slog`, added log levels, and removed panic/fatal from internal packages in favor of error propagation.
 - 2026-04-23: Implemented graceful shutdown for HTTP server and Telegram service with signal handling and bounded shutdown timeout.
 - 2026-04-23: Fixed webhook URL building for hosts with/without scheme and restored `DEBUG` in `.env.example` for local polling startup.
+- 2026-04-23: Refreshed GitHub workflows: merged into single `ci.yml`, updated action versions, and aligned branch/tag triggers.
 - 2026-04-23: Boosted distance preset visual feedback by removing Bootstrap `disabled` dimming and strengthening active/pressed highlight styles.
