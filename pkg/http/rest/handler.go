@@ -48,6 +48,7 @@ func NewHandler(
 	serveMux.HandleFunc("/api/v1/splits", handleSplits)
 	serveMux.HandleFunc("/api/v1/predict", handlePredict)
 	serveMux.HandleFunc("/api/v1/vdot", handleVDOT)
+	serveMux.HandleFunc("/api/v1/me", handleMe(tgToken))
 
 	if !debugMode {
 		// handle telegram web hook messages
