@@ -23,6 +23,8 @@
 ## Требования
 
 - Go 1.26+
+- TinyGo 0.42+ — собирает браузерный бандл (`brew tap tinygo-org/tools`,
+  `brew trust --formula tinygo-org/tools/tinygo`, `brew install tinygo`)
 - Docker (опционально)
 
 ## Переменные окружения
@@ -127,8 +129,11 @@ curl -X DELETE -H "Authorization: tma $INIT_DATA" http://localhost:8080/api/v1/r
 ## Как собирается WASM
 
 Скрипт `build.sh` делает три вещи:
-1. Копирует `wasm_exec.js` из текущего Go SDK в `assets/`.
-2. Собирает `cmd/wasm` в `assets/json.wasm` (`GOOS=js GOARCH=wasm`) — это код для браузера.
+1. Копирует в `assets/` файл `wasm_exec.js` того же тулчейна, которым собирается бандл: у TinyGo
+   и обычного Go эти файлы разные и не взаимозаменяемы.
+2. Собирает `cmd/wasm` в `assets/json.wasm` — код для браузера. По умолчанию на TinyGo: бандл
+   весит 0,93 МБ вместо 4,54 МБ на Go 1.27 (257 КБ вместо 917 КБ после brotli), а ответы
+   функций совпадают побайтно. `WASM_COMPILER=go ./build.sh` соберёт обычным Go.
 3. Собирает `cmd/calcwasm` в `pkg/wasmcalc/calc.wasm` (`GOOS=wasip1 GOARCH=wasm`,
    `-buildmode=c-shared`) — WASI-reactor для сервера.
 
@@ -141,7 +146,7 @@ curl -X DELETE -H "Authorization: tma $INIT_DATA" http://localhost:8080/api/v1/r
 Ручные эквивалентные команды:
 
 ```bash
-GOOS=js GOARCH=wasm go build -o assets/json.wasm ./cmd/wasm
+tinygo build -target=wasm -no-debug -o assets/json.wasm ./cmd/wasm
 GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o pkg/wasmcalc/calc.wasm ./cmd/calcwasm
 ```
 
@@ -179,8 +184,8 @@ go build ./ ./pkg/...
 
 ## Production / Docker
 
-`Dockerfile` многоступенчатый: сначала внутри образа собираются оба wasm-артефакта, затем
-backend binary (`/pacer`), который их встраивает.
+`Dockerfile` многоступенчатый: браузерный бандл собирается в стадии `tinygo/tinygo:0.42.0`,
+серверный reactor — обычным Go, затем backend binary (`/pacer`), который их встраивает.
 
 Сборка и запуск контейнера:
 

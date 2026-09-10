@@ -22,6 +22,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # build.sh compiles the browser bundle with TinyGo; it uses the Go
+      # toolchain installed above, which TinyGo 0.42 supports (Go 1.23-1.27).
+      - uses: acifani/setup-tinygo@v3
+        with:
+          tinygo-version: "0.42.0"
+
       - name: Test
         run: go test -race ./ ./pkg/...
 

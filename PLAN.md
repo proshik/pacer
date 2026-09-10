@@ -83,7 +83,7 @@
 - [x] Добавить Dependabot для Go-модулей и GitHub Actions.
 
 ### 13) Этап 2. Фундамент
-- [ ] Перевести сборку WASM на TinyGo (`go:wasmexport`, reactor-режим).
+- [x] Перевести сборку WASM на TinyGo: браузерный бандл — на TinyGo (0,93 МБ вместо 4,54 МБ, ответы побайтно совпадают), серверный reactor с `go:wasmexport` остаётся на обычном Go.
 - [x] Исполнять тот же артефакт на сервере через wazero.
 - [x] Мигрировать с `go-telegram-bot-api v4` на `go-telegram/bot` (Bot API 10.3).
 - [x] Заменить `NYTimes/gziphandler` на `klauspost/compress/gzhttp`.
@@ -178,3 +178,5 @@
 - 2026-09-10: Этап 3 — Mini App: свой валидатор `initData` (`pkg/miniapp`) вместо `bot.ValidateWebappRequest`, эндпоинт `/api/v1/me` с `Authorization: tma <initData>` и сроком 24 ч; страница подключает SDK только внутри Telegram, берёт тему и вход из хэша, не дожидаясь SDK; ссылка для шаринга больше не уносит подписанный `initData`. SDK в headless Chrome не загрузился — его ветку (`ready`, `expand`, `themeChanged`) подтвердит только живой запуск.
 - 2026-09-10: Этап 3 — история расчётов на сервере: `pkg/history` на `modernc.org/sqlite` (без CGO, одно соединение — очередь вместо «database is locked», проверено 16 параллельными записями под `-race`), `GET/POST /api/v1/runs` и `DELETE /api/v1/runs/{id}` только с `Authorization: tma`, база по `DB_PATH` (в образе `/data/pacer.db`, том `/data`). На странице ещё не выведено.
 - 2026-09-10: Этап 3 — сохранённые расчёты на странице Mini App: «Сохранить» становится главной кнопкой, ссылка — второстепенной; тап по записи возвращает расчёт в калькулятор. Вне Telegram и при 503 (нет `DB_PATH`) раздел скрыт. Проверено в headless Chrome с поддельным API через `Fetch`: тела и заголовки запросов, восстановление расчёта, удаление, 390 px без горизонтального скролла, консоль чистая.
+- 2026-09-10: Этап 2 — браузерный бандл собирается TinyGo 0.42: `json.wasm` 928 273 байта вместо 4 536 887 (brotli 257 КБ вместо 917 КБ); ответы `calcPace`, `calcSplits`, `calcPredict`, `calcVDOT` и ошибок совпадают побайтно с обычной сборкой, страница проверена в headless Chrome. `WASM_COMPILER=go` — явный запасной путь; TinyGo добавлен в CI и Docker.
+- 2026-09-10: Сборка wasm воспроизводима: reactor собирается с `-trimpath -buildvcs=false` — раньше Go вшивал ревизию git, и `calc.wasm` менялся с каждым коммитом без изменений кода. Две сборки подряд дают побайтно одинаковые файлы.
