@@ -379,6 +379,48 @@
             font-weight: 600;
         }
 
+        .share-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .share-btn {
+            font: inherit;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--field-bg);
+            color: var(--field-text);
+            cursor: pointer;
+        }
+
+        .share-btn:hover:not(:disabled) {
+            background: #e7f0ff;
+            border-color: #8ab4ff;
+        }
+
+        .share-btn:focus-visible {
+            outline: none;
+            box-shadow: var(--focus-ring);
+        }
+
+        .share-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .share-note {
+            font-size: 0.88rem;
+            color: var(--muted);
+        }
+
         .error-text {
             color: var(--danger);
             font-size: 0.9rem;
@@ -477,6 +519,90 @@
             }
 
             return {ok: true, parsed};
+        }
+
+        function pad2(value) {
+            return String(value).padStart(2, "0");
+        }
+
+        // Принимает "1:38:48", "38:48" и "2928" (секунды).
+        function parseTimeParam(raw) {
+            if (!raw) {
+                return null;
+            }
+
+            const parts = raw.split(":").map((part) => part.trim());
+            if (parts.some((part) => part === "" || !/^\d+$/.test(part))) {
+                return null;
+            }
+
+            let hours = 0;
+            let minutes = 0;
+            let seconds = 0;
+
+            if (parts.length === 3) {
+                [hours, minutes, seconds] = parts.map(Number);
+            } else if (parts.length === 2) {
+                [minutes, seconds] = parts.map(Number);
+            } else if (parts.length === 1) {
+                const total = Number(parts[0]);
+                hours = Math.floor(total / 3600);
+                minutes = Math.floor((total % 3600) / 60);
+                seconds = total % 60;
+            } else {
+                return null;
+            }
+
+            if (minutes > 59 || seconds > 59) {
+                return null;
+            }
+
+            return {hours, minutes, seconds};
+        }
+
+        // Дистанция и время однозначно задают расчёт: темп из них выводится,
+        // поэтому в ссылку попадают только они.
+        function updateShareURL() {
+            const params = new URLSearchParams();
+            params.set("d", document.getElementById("distInput").value);
+            params.set("t", [
+                document.getElementById("timeHourInput").value || "0",
+                pad2(document.getElementById("timeMinuteInput").value || "0"),
+                pad2(document.getElementById("timeSecondInput").value || "0")
+            ].join(":"));
+
+            history.replaceState(null, "", location.pathname + "?" + params.toString());
+        }
+
+        function applyStateFromURL() {
+            const params = new URLSearchParams(location.search);
+
+            const distance = Number(params.get("d"));
+            if (Number.isInteger(distance) && distance > 0) {
+                document.getElementById("distInput").value = distance;
+            }
+
+            const parsedTime = parseTimeParam(params.get("t"));
+            if (parsedTime) {
+                document.getElementById("timeHourInput").value = parsedTime.hours;
+                document.getElementById("timeMinuteInput").value = parsedTime.minutes;
+                document.getElementById("timeSecondInput").value = parsedTime.seconds;
+            }
+        }
+
+        function attachShareButton() {
+            const button = document.getElementById("shareButton");
+            const note = document.getElementById("shareNote");
+
+            button.addEventListener("click", async function () {
+                try {
+                    await navigator.clipboard.writeText(location.href);
+                    note.textContent = "Ссылка скопирована";
+                } catch (error) {
+                    note.textContent = "Скопируйте ссылку из адресной строки";
+                    console.error(error);
+                }
+            });
         }
 
         function getSlider() {
@@ -587,6 +713,7 @@
 
                 document.getElementById("paceMinuteInput").value = jsonResult.minute;
                 document.getElementById("paceSecondInput").value = jsonResult.second;
+                updateShareURL();
             } catch (error) {
                 setError("Ошибка вычисления темпа.");
                 console.error(error);
@@ -610,7 +737,10 @@
                 const jsonResult = JSON.parse(calcTime());
                 if (jsonResult.error) {
                     setError(jsonResult.error);
+                    return;
                 }
+
+                updateShareURL();
             } catch (error) {
                 setError("Ошибка вычисления времени.");
                 console.error(error);
@@ -784,8 +914,10 @@
                 pace();
             });
 
+            applyStateFromURL();
             attachDistanceButtons();
             attachSpinControls();
+            attachShareButton();
 
             document.getElementById("distInput").addEventListener("input", function () {
                 syncDistanceToSlider();
@@ -913,6 +1045,11 @@
         </div>
 
         <p id="errorMessage" class="error-text" role="status" aria-live="polite"></p>
+
+        <div class="share-row">
+            <button type="button" id="shareButton" class="share-btn" disabled>Скопировать ссылку</button>
+            <span id="shareNote" class="share-note" role="status" aria-live="polite">Ссылка сохраняет дистанцию и время.</span>
+        </div>
     </div>
 </div>
 </body>
