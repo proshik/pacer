@@ -25,7 +25,7 @@ const TgMethodDeleteWebhook = "deleteWebhook"
 
 type Service struct {
 	bot        *tgbotapi.BotAPI
-	calculator *calculator.Service
+	calculator calculator.Engine
 
 	startC   chan tgbotapi.Update
 	timeC    chan tgbotapi.Update
@@ -39,7 +39,7 @@ type Service struct {
 	wg       sync.WaitGroup
 }
 
-func NewService(debugMode bool, host string, token string, calculator *calculator.Service) (*Service, error) {
+func NewService(debugMode bool, host string, token string, calculator calculator.Engine) (*Service, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("create telegram bot api client: %w", err)

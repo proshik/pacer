@@ -3,8 +3,8 @@ package rest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/NYTimes/gziphandler"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/klauspost/compress/gzhttp"
 	"gorun/pkg/calculator"
 	"gorun/pkg/telegram"
 	"io"
@@ -15,6 +15,17 @@ import (
 	"time"
 )
 
+// calcResponse is the public shape of a calculation result. Both the ready to
+// print form and the split parts are returned so callers do not reimplement the
+// formatting.
+type calcResponse struct {
+	Result       string `json:"result"`
+	TotalSeconds int    `json:"total_seconds"`
+	Hours        int    `json:"hours"`
+	Minutes      int    `json:"minutes"`
+	Seconds      int    `json:"seconds"`
+}
+
 type errorResponse struct {
 	Error   string            `json:"error"`
 	Details map[string]string `json:"details,omitempty"`
@@ -24,17 +35,18 @@ func NewHandler(
 	debugMode bool,
 	tgToken string,
 	t *telegram.Service,
-	c *calculator.Service,
+	c calculator.Engine,
 	a fs.FS,
 ) (*http.ServeMux, error) {
 	serveMux := http.NewServeMux()
 	serveMux.HandleFunc("/healthz", healthCheck)
 
-	if debugMode {
-		// debug endpoints
-		serveMux.HandleFunc("/time", calculateTime(c))
-		serveMux.HandleFunc("/pace", calculatePace(c))
-	} else {
+	// The calculation API is part of the product, not a debug aid: the browser
+	// front end and any external caller reach it in every mode.
+	serveMux.HandleFunc("/api/v1/time", calculateTime(c))
+	serveMux.HandleFunc("/api/v1/pace", calculatePace(c))
+
+	if !debugMode {
 		// handle telegram web hook messages
 		serveMux.HandleFunc(fmt.Sprintf("/%s", tgToken), handleWebHook(t))
 	}
@@ -44,14 +56,14 @@ func NewHandler(
 		return nil, fmt.Errorf("open embedded assets subfs: %w", err)
 	}
 
-	assetsDir := gziphandler.GzipHandler(http.FileServer(http.FS(stripped)))
+	assetsDir := gzhttp.GzipHandler(http.FileServer(http.FS(stripped)))
 	serveMux.Handle("/", assetsDir)
 
 	return serveMux, nil
 }
 
-// calculateTime http://localhost:8080/time?pace=4m50s&dist=21095
-func calculateTime(c *calculator.Service) func(w http.ResponseWriter, r *http.Request) {
+// calculateTime GET /api/v1/time?pace=4m50s&dist=21095
+func calculateTime(c calculator.Engine) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 
@@ -64,15 +76,12 @@ func calculateTime(c *calculator.Service) func(w http.ResponseWriter, r *http.Re
 			return
 		}
 
-		result := c.Time(dist, paceDuration)
-
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte(result.String()))
+		writeCalcResult(w, c.Time(dist, paceDuration))
 	}
 }
 
-// calculatePace http://localhost:8080/pace?dist=21097&time=1h38m48s
-func calculatePace(c *calculator.Service) func(w http.ResponseWriter, r *http.Request) {
+// calculatePace GET /api/v1/pace?dist=21097&time=1h38m48s
+func calculatePace(c calculator.Engine) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 
@@ -85,10 +94,7 @@ func calculatePace(c *calculator.Service) func(w http.ResponseWriter, r *http.Re
 			return
 		}
 
-		result := c.Pace(dist, timeDuration)
-
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte(result.String()))
+		writeCalcResult(w, c.Pace(dist, timeDuration))
 	}
 }
 
@@ -159,6 +165,21 @@ func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Requ
 		t.DoUpdate(update)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+	}
+}
+
+func writeCalcResult(w http.ResponseWriter, result time.Duration) {
+	hours, minutes, seconds := calculator.Split(result)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(calcResponse{
+		Result:       result.String(),
+		TotalSeconds: int(result.Seconds()),
+		Hours:        hours,
+		Minutes:      minutes,
+		Seconds:      seconds,
+	}); err != nil {
+		slog.Error("encode calculation result failed", "err", err)
 	}
 }
 

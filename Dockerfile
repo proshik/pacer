@@ -12,9 +12,12 @@ RUN go mod download
 
 COPY . ./
 
-# Build browser runtime files from the current Go toolchain.
+# Build both wasm artifacts from the current Go toolchain: the browser bundle
+# and the WASI reactor the server can run through wazero.
 RUN cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" ./assets/ \
-	&& GOOS=js GOARCH=wasm go build -o ./assets/json.wasm ./cmd/wasm
+	&& GOOS=js GOARCH=wasm go build -o ./assets/json.wasm ./cmd/wasm \
+	&& GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared \
+		-o ./pkg/wasmcalc/calc.wasm ./cmd/calcwasm
 
 # Build the Linux backend binary with embedded assets.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/pacer .

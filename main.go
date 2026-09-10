@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"embed"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"gorun/pkg/calculator"
 	"gorun/pkg/http/rest"
 	"gorun/pkg/telegram"
+	"gorun/pkg/wasmcalc"
 	"log/slog"
 	"net/http"
 	"os"
@@ -69,7 +71,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	c := calculator.NewService()
+	engineName := os.Getenv("CALC_ENGINE")
+	c, closeEngine, err := newCalculationEngine(engineName)
+	if err != nil {
+		slog.Error("startup failed", "err", err)
+		os.Exit(1)
+	}
+	slog.Info("calculation engine selected", "engine", cmp.Or(strings.ToLower(strings.TrimSpace(engineName)), "native"))
+
 	t, err := telegram.NewService(debug, host, tgToken, c)
 	if err != nil {
 		slog.Error("telegram service init failed", "err", err)
@@ -125,12 +134,39 @@ func main() {
 		slog.Info("telegram service closed")
 	}
 
+	if err := closeEngine(shutdownCtx); err != nil {
+		slog.Error("calculation engine shutdown failed", "err", err)
+	}
+
 	if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("server returned error after shutdown", "err", err)
 		os.Exit(1)
 	}
 
 	slog.Info("shutdown complete")
+}
+
+// newCalculationEngine picks how the formulas are executed. "native" links
+// them in directly; "wasm" runs the very same artifact the browser loads,
+// through wazero, so server and client cannot drift apart.
+//
+// The returned close function is always safe to call.
+func newCalculationEngine(value string) (calculator.Engine, func(context.Context) error, error) {
+	noop := func(context.Context) error { return nil }
+
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "native":
+		return calculator.NewService(), noop, nil
+	case "wasm":
+		engine, err := wasmcalc.New(context.Background())
+		if err != nil {
+			return nil, noop, fmt.Errorf("create wasm calculation engine: %w", err)
+		}
+
+		return engine, engine.Close, nil
+	default:
+		return nil, noop, fmt.Errorf("unknown CALC_ENGINE %q, want \"native\" or \"wasm\"", value)
+	}
 }
 
 func requiredEnv(key string) (string, error) {
