@@ -28,8 +28,8 @@
     <style>
         /*
          * Палитра — мир шоссейного бега: асфальт, бумага, дорожная разметка.
-         * Жёлтый — только метка (активная дистанция, отметки 5 км, рассчитанное
-         * число), никогда не текст на светлом фоне.
+         * Жёлтый — только метка (активная дистанция, отметки 5 км), никогда не
+         * текст на светлом фоне.
          */
         :root {
             --paper: #F3F4F1;
@@ -359,22 +359,6 @@
             vertical-align: top;
         }
 
-        .clock-digits {
-            display: inline-flex;
-            align-items: baseline;
-        }
-
-        /*
-         * Рассчитанное число подчёркнуто разметкой — одной линией под всеми
-         * цифрами и двоеточиями. Линия лежит на нижней кромке строки с цифрами,
-         * над зоной нижних стрелок (44px).
-         */
-        .readout.is-derived .clock-digits {
-            background: linear-gradient(var(--mark), var(--mark)) no-repeat;
-            background-size: 100% 0.09em;
-            background-position: 0 calc(100% - 44px);
-        }
-
         .segment-value:focus-visible {
             outline: 3px solid var(--focus);
             outline-offset: 2px;
@@ -382,6 +366,15 @@
 
         .segment-value.input-error {
             color: var(--signal);
+        }
+
+        /*
+         * Рассчитанное число чуть мягче введённого. Цвет — смесь текста с фоном,
+         * поэтому он сам подстраивается под тёмную тему и тему Telegram; где
+         * color-mix не поддерживается, цифры остаются обычного цвета.
+         */
+        .readout.is-derived .segment-value:not(.input-error) {
+            color: color-mix(in srgb, var(--ink) 85%, var(--paper));
         }
 
         .spin-btn {
@@ -836,8 +829,8 @@
         }
 
         // Ширина поля по числу цифр, чтобы 1:25:39 читалось как одно число.
-        // Ширина поля — ровно по цифрам: табличные цифры по 1ch, поэтому
-        // подчёркивание рассчитанного числа идёт одной линией через двоеточия.
+        // Ширина поля — ровно по цифрам (табличные цифры по 1ch), чтобы разряды
+        // стояли плотно, как на табло.
         function autosize(input) {
             input.style.width = Math.max(input.value.length, 1) + "ch";
         }
@@ -1665,7 +1658,6 @@
         <div class="readout" id="timeReadout" role="group" aria-labelledby="time-title">
             <h2 class="readout-label" id="time-title">Время <span class="derived-note">рассчитано</span></h2>
             <div class="clock">
-                <div class="clock-digits">
                 <div class="segment spin-control">
                     <button type="button" class="spin-btn spin-inc" tabindex="-1" aria-label="Больше часов" disabled></button>
                     <input id="timeHourInput" class="segment-value" type="text" name="timeHour" value="1"
@@ -1686,14 +1678,12 @@
                            min="0" max="59" inputmode="numeric" autocomplete="off" aria-label="Секунды" disabled>
                     <button type="button" class="spin-btn spin-dec" tabindex="-1" aria-label="Меньше секунд" disabled></button>
                 </div>
-                </div>
             </div>
         </div>
 
         <div class="readout is-derived" id="paceReadout" role="group" aria-labelledby="pace-title">
             <h2 class="readout-label" id="pace-title">Темп <span class="derived-note">рассчитан</span></h2>
             <div class="clock">
-                <div class="clock-digits">
                 <div class="segment spin-control">
                     <button type="button" class="spin-btn spin-inc" tabindex="-1" aria-label="Больше минут темпа" disabled></button>
                     <input id="paceMinuteInput" class="segment-value" type="text" name="paceMinute" value="4"
@@ -1706,7 +1696,6 @@
                     <input id="paceSecondInput" class="segment-value" type="text" name="paceSecond" value="04"
                            min="0" max="59" inputmode="numeric" autocomplete="off" aria-label="Секунды темпа" disabled>
                     <button type="button" class="spin-btn spin-dec" tabindex="-1" aria-label="Меньше секунд темпа" disabled></button>
-                </div>
                 </div>
                 <span class="clock-unit">/км</span>
             </div>
