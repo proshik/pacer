@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"bytes"
 	"encoding/json"
 	"gorun/pkg/calculator"
 	"net/http"
@@ -82,5 +83,60 @@ func TestCalculatePaceSuccess(t *testing.T) {
 
 	if got := strings.TrimSpace(response.Body.String()); got != "4m9s" {
 		t.Fatalf("unexpected pace result: got %q want %q", got, "4m9s")
+	}
+}
+
+func decodeError(t *testing.T, body *bytes.Buffer) errorResponse {
+	t.Helper()
+
+	var resp errorResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+
+	return resp
+}
+
+func TestCalculateTimeReportsMissingFieldsAsRequired(t *testing.T) {
+	handler := newTestHandler(t)
+
+	request := httptest.NewRequest(http.MethodGet, "/time?pace=4m50s", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+
+	if got, want := decodeError(t, recorder.Body).Details["dist"], "field is required"; got != want {
+		t.Errorf("details[dist] = %q, want %q", got, want)
+	}
+}
+
+func TestCalculatePaceReportsMissingFieldsAsRequired(t *testing.T) {
+	handler := newTestHandler(t)
+
+	request := httptest.NewRequest(http.MethodGet, "/pace?time=1h38m48s", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+
+	if got, want := decodeError(t, recorder.Body).Details["dist"], "field is required"; got != want {
+		t.Errorf("details[dist] = %q, want %q", got, want)
+	}
+}
+
+func TestCalculateTimeStillRejectsNonNumericDistance(t *testing.T) {
+	handler := newTestHandler(t)
+
+	request := httptest.NewRequest(http.MethodGet, "/time?pace=4m50s&dist=abc", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	if got, want := decodeError(t, recorder.Body).Details["dist"], "incorrect type should be number"; got != want {
+		t.Errorf("details[dist] = %q, want %q", got, want)
 	}
 }

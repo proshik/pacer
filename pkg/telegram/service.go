@@ -30,6 +30,7 @@ type Service struct {
 	startC   chan tgbotapi.Update
 	timeC    chan tgbotapi.Update
 	paceC    chan tgbotapi.Update
+	unknownC chan tgbotapi.Update
 	messages chan tgbotapi.Chattable
 	done     chan struct{}
 
@@ -52,6 +53,7 @@ func NewService(debugMode bool, host string, token string, calculator *calculato
 		startC:     make(chan tgbotapi.Update, 64),
 		timeC:      make(chan tgbotapi.Update, 64),
 		paceC:      make(chan tgbotapi.Update, 64),
+		unknownC:   make(chan tgbotapi.Update, 64),
 		messages:   make(chan tgbotapi.Chattable, 128),
 		done:       make(chan struct{}),
 	}
@@ -142,7 +144,7 @@ func (s *Service) handleUpdate(update tgbotapi.Update) {
 		case "pace":
 			s.enqueueUpdate(s.paceC, command, update)
 		default:
-			s.enqueueUpdate(s.startC, command, update)
+			s.enqueueUpdate(s.unknownC, command, update)
 		}
 		return
 	}
@@ -190,6 +192,8 @@ func (s *Service) startDispatcher() {
 				s.enqueueMessage(s.handleTimeCmd(&u))
 			case u := <-s.paceC:
 				s.enqueueMessage(s.handlePaceCmd(&u))
+			case u := <-s.unknownC:
+				s.enqueueMessage(handleUnknownCmd(&u))
 			}
 		}
 	}()
@@ -237,7 +241,7 @@ func callTelegramAPI(client *http.Client, url string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
@@ -298,6 +302,13 @@ func handleStartCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 	return msg
 }
 
+func handleUnknownCmd(update *tgbotapi.Update) tgbotapi.Chattable {
+	return buildMsg(update, fmt.Sprintf(
+		"Unknown command: /%s\n\nAvailable commands: /start, /time, /pace",
+		update.Message.Command(),
+	))
+}
+
 func (s *Service) handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 	arguments, err := extractArguments(update)
 	if err != nil {
@@ -310,7 +321,7 @@ func (s *Service) handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 
 	paceDuration, err := time.ParseDuration(arguments[0])
 	if err != nil {
-		return buildMsg(update, "invalid pace value: "+arguments[1])
+		return buildMsg(update, "invalid pace value: "+arguments[0])
 	}
 
 	dist, err := strconv.Atoi(arguments[1])

@@ -65,6 +65,46 @@
 - [x] Update action versions to current majors and remove deprecated workflow patterns.
 - [x] Align triggers with active branches (`master` + `main`) and tagged release publishing (`v*`).
 
+## Roadmap 2026-09 (по итогам ревизии репозитория)
+
+Источник: аудит репозитория, разбор конкурентов и анализ WASM-стека.
+Монетизация из плана исключена по решению владельца проекта.
+
+### 12) Этап 1. Гигиена
+- [x] Разделить сломанный `<meta charset ... name="viewport">` в `assets/index.html` на два тега.
+- [x] Свести интерфейс к одному языку и выставить корректный `<html lang>`.
+- [x] Убрать Bootstrap 4, jQuery и ion-rangeslider; перейти на нативный `input[type=range]` и CSS Grid.
+- [x] Починить сообщение об ошибке в `handleTimeCmd` (печатает `arguments[1]` вместо `arguments[0]`).
+- [x] Починить недостижимую ветку `"field is required"` в `pkg/http/rest/handler.go`.
+- [x] Убрать бессмысленный `% 60` для часов в `cmd/wasm/main.go`.
+- [x] Отвечать на неизвестные команды подсказкой вместо молчаливого приветствия.
+- [x] Добавить `go test -race` и golangci-lint в CI.
+- [x] Добавить файл лицензии.
+- [x] Добавить Dependabot для Go-модулей и GitHub Actions.
+
+### 13) Этап 2. Фундамент
+- [ ] Перевести сборку WASM на TinyGo (`go:wasmexport`, reactor-режим).
+- [ ] Исполнять тот же артефакт на сервере через wazero.
+- [ ] Мигрировать с `go-telegram-bot-api v4` на `go-telegram/bot` (Bot API 10.3).
+- [ ] Заменить `NYTimes/gziphandler` на `klauspost/compress/gzhttp`.
+- [ ] Вынести `/api/v1` из-под флага `DEBUG`.
+- [ ] Добавить состояние расчёта в URL (shareable-ссылка).
+- [ ] Покрыть тестами `pkg/telegram` (сейчас 0%).
+
+### 14) Этап 3. Продукт
+- [ ] Telegram Mini App с авторизацией через `initData`.
+- [ ] Таблица сплитов.
+- [ ] Предсказание времени по формулам Ригеля и Кэмерона.
+- [ ] VDOT и тренировочные зоны по Дэниелсу.
+- [ ] Карточка результата картинкой в чат.
+- [ ] SQLite и история расчётов.
+- [ ] Тёмная тема и поддержка `themeParams` Telegram.
+
+### 15) Этап 4. Фронтир
+- [ ] Описать контракт JS<->WASM в `.wit`.
+- [ ] Собрать компонент `wasip2` и сгенерировать браузерную сторону через `jco transpile`.
+- [ ] Разбор GPX/FIT в браузере с поправкой на рельеф.
+
 ## Validation
 - [x] Run: `go test ./ ./pkg/...`
 - [x] Run: `go vet ./ ./pkg/...`
@@ -93,3 +133,8 @@
 - 2026-04-23: Fixed webhook URL building for hosts with/without scheme and restored `DEBUG` in `.env.example` for local polling startup.
 - 2026-04-23: Refreshed GitHub workflows: merged into single `ci.yml`, updated action versions, and aligned branch/tag triggers.
 - 2026-04-23: Boosted distance preset visual feedback by removing Bootstrap `disabled` dimming and strengthening active/pressed highlight styles.
+- 2026-09-10: Ревизия репозитория: аудит, разбор конкурентов, план на 4 этапа (монетизация исключена).
+- 2026-09-10: Этап 1 — разделён сломанный тег `meta` (charset и viewport были в одном элементе), интерфейс переведён полностью на русский, `lang="ru"`.
+- 2026-09-10: Этап 1 — убраны Bootstrap 4, jQuery и ion-rangeslider; слайдер на нативном `input[type=range]`, вёрстка на flex/CSS. Страница больше не обращается к внешним CDN.
+- 2026-09-10: Этап 1 — исправлены 4 дефекта: аргумент в ошибке `handleTimeCmd`, недостижимая ветка `field is required`, `%60` на часах в WASM (вынесено в `calculator.Split`), ответ на неизвестные команды.
+- 2026-09-10: Этап 1 — добавлены тесты `pkg/telegram` (было 0%), тесты `Split` и HTTP-валидации; в CI добавлены `go test -race` и golangci-lint; добавлены LICENSE (MIT) и Dependabot.

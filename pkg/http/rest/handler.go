@@ -56,27 +56,8 @@ func calculateTime(c *calculator.Service) func(w http.ResponseWriter, r *http.Re
 		query := r.URL.Query()
 
 		details := map[string]string{}
-		distValue := query.Get("dist")
-		if distValue == "" {
-			details["dist"] = "field is required"
-		}
-
-		paceValue := query.Get("pace")
-		if paceValue == "" {
-			details["pace"] = "field is required"
-		}
-
-		dist, distErr := strconv.Atoi(distValue)
-		if distErr != nil {
-			details["dist"] = "incorrect type should be number"
-		} else if dist <= 0 {
-			details["dist"] = "value should be greater than zero"
-		}
-
-		paceDuration, paceErr := time.ParseDuration(paceValue)
-		if paceErr != nil {
-			details["pace"] = paceErr.Error()
-		}
+		dist := parseDistance(query.Get("dist"), details)
+		paceDuration := parseDurationField(query.Get("pace"), "pace", details)
 
 		if len(details) > 0 {
 			writeJSONError(w, http.StatusBadRequest, "validation failed", details)
@@ -96,27 +77,8 @@ func calculatePace(c *calculator.Service) func(w http.ResponseWriter, r *http.Re
 		query := r.URL.Query()
 
 		details := map[string]string{}
-		distValue := query.Get("dist")
-		if distValue == "" {
-			details["dist"] = "field is required"
-		}
-
-		timeValue := query.Get("time")
-		if timeValue == "" {
-			details["time"] = "field is required"
-		}
-
-		dist, distErr := strconv.Atoi(distValue)
-		if distErr != nil {
-			details["dist"] = "incorrect type should be number"
-		} else if dist <= 0 {
-			details["dist"] = "value should be greater than zero"
-		}
-
-		timeDuration, timeErr := time.ParseDuration(timeValue)
-		if timeErr != nil {
-			details["time"] = timeErr.Error()
-		}
+		dist := parseDistance(query.Get("dist"), details)
+		timeDuration := parseDurationField(query.Get("time"), "time", details)
 
 		if len(details) > 0 {
 			writeJSONError(w, http.StatusBadRequest, "validation failed", details)
@@ -130,9 +92,49 @@ func calculatePace(c *calculator.Service) func(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// parseDistance validates the dist query parameter in meters, recording why it
+// was rejected in details. An empty value is reported as missing rather than as
+// a malformed number.
+func parseDistance(value string, details map[string]string) int {
+	if value == "" {
+		details["dist"] = "field is required"
+		return 0
+	}
+
+	dist, err := strconv.Atoi(value)
+	if err != nil {
+		details["dist"] = "incorrect type should be number"
+		return 0
+	}
+
+	if dist <= 0 {
+		details["dist"] = "value should be greater than zero"
+		return 0
+	}
+
+	return dist
+}
+
+// parseDurationField validates a Go duration query parameter, recording why it
+// was rejected under its own field name in details.
+func parseDurationField(value string, field string, details map[string]string) time.Duration {
+	if value == "" {
+		details[field] = "field is required"
+		return 0
+	}
+
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		details[field] = err.Error()
+		return 0
+	}
+
+	return duration
+}
+
 func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 
 		data, err := io.ReadAll(r.Body)
 		if err != nil {

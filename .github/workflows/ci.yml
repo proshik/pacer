@@ -23,10 +23,15 @@ jobs:
           go-version-file: go.mod
 
       - name: Test
-        run: go test ./ ./pkg/...
+        run: go test -race ./ ./pkg/...
 
       - name: Vet
         run: go vet ./ ./pkg/...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13
 
       - name: Build WASM
         run: ./build.sh

@@ -4,16 +4,7 @@ import (
 	"time"
 )
 
-type Unit int
-
-const (
-	metric Unit = iota
-	imperial
-)
-
-type Service struct {
-	//unit Unit
-}
+type Service struct{}
 
 func NewService() *Service {
 	return &Service{}

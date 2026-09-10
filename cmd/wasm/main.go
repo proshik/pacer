@@ -52,10 +52,7 @@ func paceWrapper(c *calculator.Service) js.Func {
 }
 
 func buildResult(result time.Duration) string {
-	totalSeconds := int(result.Seconds())
-	hours := totalSeconds / 3600
-	minutes := (totalSeconds % 3600) / 60
-	seconds := totalSeconds % 60
+	hours, minutes, seconds := calculator.Split(result)
 
 	b, err := json.Marshal(CalcResult{
 		Hour:   strconv.Itoa(hours),
@@ -137,9 +134,10 @@ func timeWrapper(c *calculator.Service) js.Func {
 
 		timeResult := c.Time(dist, paceValue)
 
-		timeHourInput.Set("value", strconv.Itoa(int(timeResult.Hours())%60))
-		timeMinuteInput.Set("value", strconv.Itoa(int(timeResult.Minutes())%60))
-		timeSecondInput.Set("value", strconv.Itoa(int(timeResult.Seconds())%60))
+		resultHours, resultMinutes, resultSeconds := calculator.Split(timeResult)
+		timeHourInput.Set("value", strconv.Itoa(resultHours))
+		timeMinuteInput.Set("value", strconv.Itoa(resultMinutes))
+		timeSecondInput.Set("value", strconv.Itoa(resultSeconds))
 
 		return buildResult(timeResult)
 	})

@@ -1,15 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
-    <meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Калькулятор бегового темпа и финишного времени: задайте дистанцию и темп — получите время, или наоборот.">
+    <meta name="theme-color" content="#1f6feb">
     <title>Pacer</title>
 
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
-          integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
-    <link rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/ion-rangeslider/2.3.1/css/ion.rangeSlider.min.css"/>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ion-rangeslider/2.3.1/js/ion.rangeSlider.min.js"></script>
     <script src="wasm_exec.js"></script>
 
     <style>
@@ -23,13 +20,23 @@
             --accent-bright: #2f8dff;
             --accent-bright-hover: #1f78f0;
             --border: #dce4ef;
+            --field-bg: #f5f8fd;
+            --field-text: #4b5f76;
             --danger: #c62828;
             --shadow: 0 16px 40px rgba(18, 34, 65, 0.08);
+            --focus-ring: 0 0 0 0.2rem rgba(31, 111, 235, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
         }
 
         body {
             background: linear-gradient(180deg, #f7f9fd 0%, #eef2f8 100%);
             color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
             min-height: 100dvh;
             margin: 0;
             display: flex;
@@ -56,7 +63,7 @@
         }
 
         .headline h1 {
-            margin-bottom: 6px;
+            margin: 0 0 6px;
             font-size: 2rem;
             font-weight: 700;
         }
@@ -67,13 +74,183 @@
         }
 
         .section-title {
-            margin-top: 14px;
-            margin-bottom: 10px;
+            margin: 14px 0 10px;
             font-size: 0.85rem;
             letter-spacing: 0.06em;
             color: var(--muted);
             text-transform: uppercase;
         }
+
+        /* ---------- дистанция ---------- */
+
+        .field-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 8px;
+            align-items: flex-start;
+        }
+
+        .field-box {
+            min-width: 110px;
+            flex: 1 1 110px;
+        }
+
+        .field-box.dist-box {
+            flex: 0 1 210px;
+            max-width: 210px;
+        }
+
+        .field-box.slider-box {
+            flex: 1 1 280px;
+            min-width: 240px;
+        }
+
+        .compact-field {
+            flex: 0 0 auto;
+            min-width: 0;
+        }
+
+        label {
+            display: inline-block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #334155;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: stretch;
+            width: 100%;
+        }
+
+        .control {
+            font: inherit;
+            color: var(--text);
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 0.25rem;
+            padding: 6px 10px;
+            min-width: 0;
+        }
+
+        .control:focus {
+            outline: none;
+            border-color: #8ab4ff;
+            box-shadow: var(--focus-ring);
+        }
+
+        .control.input-error {
+            border-color: var(--danger);
+        }
+
+        .input-row .control {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            flex: 1 1 auto;
+        }
+
+        .unit {
+            display: inline-flex;
+            align-items: center;
+            padding: 0 10px;
+            background: var(--field-bg);
+            border: 1px solid var(--border);
+            border-left: 0;
+            border-radius: 0 0.25rem 0.25rem 0;
+            color: var(--field-text);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .numeric-input {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .hint {
+            color: var(--muted);
+            margin: 4px 0 0;
+            font-size: 0.88rem;
+        }
+
+        /* ---------- нативный слайдер вместо ion-rangeslider ---------- */
+
+        .slider-input {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 22px;
+            margin: 6px 0 0;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .slider-input:focus {
+            outline: none;
+        }
+
+        .slider-input::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: #dfe7f4;
+        }
+
+        .slider-input::-moz-range-track {
+            height: 6px;
+            border-radius: 999px;
+            background: #dfe7f4;
+        }
+
+        .slider-input::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            margin-top: -7px;
+            border: 0;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 2px 6px rgba(18, 34, 65, 0.28);
+        }
+
+        .slider-input::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border: 0;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 2px 6px rgba(18, 34, 65, 0.28);
+        }
+
+        .slider-input:focus-visible::-webkit-slider-thumb {
+            box-shadow: var(--focus-ring), 0 2px 6px rgba(18, 34, 65, 0.28);
+        }
+
+        .slider-input:focus-visible::-moz-range-thumb {
+            box-shadow: var(--focus-ring), 0 2px 6px rgba(18, 34, 65, 0.28);
+        }
+
+        .slider-input:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .slider-scale {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 2px;
+            font-size: 0.78rem;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .slider-readout {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ---------- пресеты дистанций ---------- */
 
         .distance-buttons {
             display: flex;
@@ -82,86 +259,48 @@
             margin-bottom: 16px;
         }
 
-        .distance-buttons .btn {
-            border-radius: 999px;
+        .preset-btn {
+            font: inherit;
             font-weight: 600;
             font-size: 0.9rem;
             padding: 5px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--accent);
+            background-color: var(--accent);
+            color: #fff;
+            cursor: pointer;
             transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
         }
 
-        .distance-buttons .btn.disabled,
-        .distance-buttons .btn:not(:disabled) {
-            opacity: 1;
-        }
-
-        .distance-buttons .btn.disabled {
-            pointer-events: auto;
-        }
-
-        .btn-primary {
-            background-color: var(--accent);
-            border-color: var(--accent);
-        }
-
-        .btn-primary:hover, .btn-primary:focus {
+        .preset-btn:hover,
+        .preset-btn:focus {
             background-color: var(--accent-hover);
             border-color: var(--accent-hover);
         }
 
-        .distance-buttons .btn.active-preset,
-        .distance-buttons .btn.active-preset:hover,
-        .distance-buttons .btn.active-preset:focus {
+        .preset-btn:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 0.2rem rgba(47, 141, 255, 0.35);
+        }
+
+        .preset-btn.active-preset,
+        .preset-btn.active-preset:hover,
+        .preset-btn.active-preset:focus {
             background-color: var(--accent-bright);
             border-color: var(--accent-bright);
-            color: #fff;
             box-shadow: 0 0 0 0.2rem rgba(47, 141, 255, 0.35), 0 6px 16px rgba(31, 120, 240, 0.24);
         }
 
-        .distance-buttons .btn.active-preset:active {
+        .preset-btn.active-preset:active {
             background-color: var(--accent-bright-hover);
             border-color: var(--accent-bright-hover);
         }
 
-        .distance-buttons .btn:focus,
-        .distance-buttons .btn:focus-visible {
-            box-shadow: 0 0 0 0.2rem rgba(47, 141, 255, 0.35);
+        .preset-btn:disabled {
+            cursor: not-allowed;
         }
 
-        .field-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 14px;
-            margin-bottom: 8px;
-        }
-
-        .field-box {
-            min-width: 110px;
-            flex: 1 1 110px;
-        }
-
-        .compact-field {
-            flex: 0 0 auto;
-            min-width: 0;
-        }
-
-        .compact-field .input-group {
-            width: max-content;
-        }
-
-        .field-box label {
-            font-weight: 600;
-            margin-bottom: 6px;
-            color: #334155;
-            margin-right: 10px;
-        }
-
-        .input-group-text {
-            background: #f5f8fd;
-            border-color: var(--border);
-            color: #4b5f76;
-            font-weight: 600;
-        }
+        /* ---------- спиннеры ---------- */
 
         .spin-control {
             display: inline-flex;
@@ -171,9 +310,16 @@
             overflow: hidden;
             background: #fff;
             box-shadow: 0 1px 0 rgba(18, 34, 65, 0.03);
+            width: max-content;
+        }
+
+        .spin-control:focus-within {
+            border-color: #8ab4ff;
+            box-shadow: var(--focus-ring);
         }
 
         .spin-btn {
+            font: inherit;
             border: 0;
             background: #f3f7ff;
             color: #2a4365;
@@ -190,48 +336,25 @@
             outline: none;
         }
 
+        .spin-btn:focus-visible {
+            box-shadow: inset 0 0 0 2px var(--accent);
+        }
+
         .spin-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .spin-unit {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0 10px;
-            min-width: 32px;
-            background: #f5f8fd;
-            color: #4b5f76;
-            border-left: 1px solid var(--border);
-            font-weight: 600;
-        }
-
-        .form-control {
-            border-color: var(--border);
-        }
-
-        .form-control:focus {
-            border-color: #8ab4ff;
-            box-shadow: 0 0 0 0.2rem rgba(31, 111, 235, 0.2);
-        }
-
-        .form-control.input-error {
-            border-color: var(--danger);
-        }
-
-        .numeric-input {
-            text-align: right;
-            font-variant-numeric: tabular-nums;
+        .spin-control .numeric-input {
             border: 0;
             border-radius: 0;
             box-shadow: none;
             touch-action: none;
+            background: #fff;
         }
 
-        #distInput {
-            border: 1px solid var(--border);
-            border-radius: 0.25rem;
+        .spin-control .numeric-input:focus {
+            box-shadow: none;
         }
 
         .numeric-input-3 {
@@ -244,27 +367,22 @@
             min-width: 6ch;
         }
 
-        .numeric-input:focus {
-            box-shadow: none;
-        }
-
-        .spin-control:focus-within {
-            border-color: #8ab4ff;
-            box-shadow: 0 0 0 0.2rem rgba(31, 111, 235, 0.2);
-        }
-
-        .hint {
-            color: var(--muted);
-            margin-top: 4px;
-            margin-bottom: 0;
-            font-size: 0.88rem;
+        .spin-unit {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 10px;
+            min-width: 32px;
+            background: var(--field-bg);
+            color: var(--field-text);
+            border-left: 1px solid var(--border);
+            font-weight: 600;
         }
 
         .error-text {
             color: var(--danger);
             font-size: 0.9rem;
-            margin-top: 10px;
-            margin-bottom: 0;
+            margin: 10px 0 0;
             min-height: 24px;
         }
 
@@ -283,35 +401,26 @@
                 border-radius: 14px;
             }
 
-            .field-box {
+            .field-box,
+            .field-box.dist-box,
+            .field-box.slider-box {
                 min-width: 0;
                 flex: 1 1 100%;
-            }
-
-            .field-box[style*="max-width"] {
-                max-width: 100% !important;
+                max-width: none;
             }
 
             .compact-field {
                 flex: 1 1 calc(50% - 7px);
             }
 
-            .compact-field .input-group {
+            .spin-control {
                 width: 100%;
             }
 
-            .numeric-input-3 {
-                width: 100%;
-                min-width: 0;
-            }
-
+            .numeric-input-3,
             .numeric-input-2 {
                 width: 100%;
                 min-width: 0;
-            }
-
-            .spin-control {
-                width: 100%;
             }
 
             .spin-btn {
@@ -319,16 +428,21 @@
                 min-width: 36px;
             }
         }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important;
+            }
+        }
     </style>
 
     <script>
         const wasmFileName = "json.wasm";
         const distButtonIDs = ["b1km", "b3km", "b5km", "b10km", "b21km", "b42km", "b50km", "b50mile", "b100km", "b100mile"];
-        let sliderInstance;
+        const spinInputIDs = ["timeHourInput", "timeMinuteInput", "timeSecondInput", "paceMinuteInput", "paceSecondInput"];
 
         function setError(message) {
-            const errorMessage = document.getElementById("errorMessage");
-            errorMessage.textContent = message || "";
+            document.getElementById("errorMessage").textContent = message || "";
         }
 
         function clearInputErrors() {
@@ -347,20 +461,9 @@
         }
 
         function setInputsDisabled(disabled) {
-            document.querySelectorAll(".disabled").forEach((element) => {
+            document.querySelectorAll("input, button").forEach((element) => {
                 element.disabled = disabled;
             });
-
-            distButtonIDs.forEach((id) => {
-                const button = document.getElementById(id);
-                if (button) {
-                    button.disabled = disabled;
-                }
-            });
-
-            if (sliderInstance) {
-                sliderInstance.update({disable: disabled});
-            }
         }
 
         function parseNonNegativeInt(value) {
@@ -376,11 +479,27 @@
             return {ok: true, parsed};
         }
 
+        function getSlider() {
+            return document.getElementById("slider");
+        }
+
+        function formatMeters(meters) {
+            return meters.toLocaleString("ru-RU");
+        }
+
+        function updateSliderReadout(value) {
+            document.getElementById("sliderReadout").textContent = formatMeters(value) + " м";
+        }
+
+        // distInput -> слайдер
         function syncDistanceToSlider() {
-            const distInput = document.getElementById("distInput");
-            const distValue = Number(distInput.value);
+            const slider = getSlider();
+            const distValue = Number(document.getElementById("distInput").value);
+
             if (Number.isInteger(distValue) && distValue >= 0) {
-                sliderInstance.update({from: distValue});
+                const clamped = clamp(distValue, Number(slider.min), Number(slider.max));
+                slider.value = clamped;
+                updateSliderReadout(clamped);
                 updatePresetHighlight(distValue);
                 return;
             }
@@ -388,28 +507,16 @@
             updatePresetHighlight(null);
         }
 
-        function getSliderDistanceValue() {
-            if (sliderInstance && sliderInstance.result && Number.isFinite(sliderInstance.result.from)) {
-                return sliderInstance.result.from;
-            }
-
-            const raw = (document.getElementById("slider").value || "").replace(/[^\d]/g, "");
-            if (raw === "") {
-                return null;
-            }
-
-            const parsed = Number(raw);
-            return Number.isFinite(parsed) ? parsed : null;
-        }
-
+        // слайдер -> distInput
         function syncDistanceFromSlider() {
-            const sliderValue = getSliderDistanceValue();
-            if (sliderValue === null) {
+            const sliderValue = Number(getSlider().value);
+            if (!Number.isFinite(sliderValue)) {
                 updatePresetHighlight(null);
                 return;
             }
 
             document.getElementById("distInput").value = sliderValue;
+            updateSliderReadout(sliderValue);
             updatePresetHighlight(sliderValue);
         }
 
@@ -421,11 +528,7 @@
                     return;
                 }
 
-                if (Number(button.value) === selectedValue) {
-                    button.classList.add("active-preset");
-                } else {
-                    button.classList.remove("active-preset");
-                }
+                button.classList.toggle("active-preset", Number(button.value) === selectedValue);
             });
         }
 
@@ -476,8 +579,7 @@
             const seconds = document.getElementById("timeSecondInput").value;
 
             try {
-                const result = calcPace(validation.dist, hours, minutes, seconds);
-                const jsonResult = JSON.parse(result);
+                const jsonResult = JSON.parse(calcPace(validation.dist, hours, minutes, seconds));
                 if (jsonResult.error) {
                     setError(jsonResult.error);
                     return;
@@ -503,11 +605,11 @@
             }
 
             try {
-                const result = calcTime();
-                const jsonResult = JSON.parse(result);
+                // calcTime() читает distInput/paceMinuteInput/paceSecondInput из DOM
+                // и сам записывает результат в поля времени.
+                const jsonResult = JSON.parse(calcTime());
                 if (jsonResult.error) {
                     setError(jsonResult.error);
-                    return;
                 }
             } catch (error) {
                 setError("Ошибка вычисления времени.");
@@ -519,10 +621,8 @@
             distButtonIDs.forEach((id) => {
                 const button = document.getElementById(id);
                 button.addEventListener("click", function () {
-                    const selectedDistance = Number(button.value);
-                    sliderInstance.update({from: selectedDistance});
+                    getSlider().value = button.value;
                     syncDistanceFromSlider();
-                    updatePresetHighlight(selectedDistance);
                     pace();
                 });
             });
@@ -546,8 +646,7 @@
 
         function applySpinValue(input, nextValue) {
             const bounds = getInputBounds(input);
-            const clamped = clamp(Math.round(nextValue), bounds.min, bounds.max);
-            input.value = clamped;
+            input.value = clamp(Math.round(nextValue), bounds.min, bounds.max);
             input.dispatchEvent(new Event("input", {bubbles: true}));
         }
 
@@ -599,11 +698,9 @@
         function attachSpinInput(inputId) {
             const input = document.getElementById(inputId);
             const container = input.closest(".spin-control");
-            const decButton = container.querySelector(".spin-dec");
-            const incButton = container.querySelector(".spin-inc");
 
-            startPressRepeat(decButton, input, -1);
-            startPressRepeat(incButton, input, 1);
+            startPressRepeat(container.querySelector(".spin-dec"), input, -1);
+            startPressRepeat(container.querySelector(".spin-inc"), input, 1);
 
             input.addEventListener("wheel", (event) => {
                 if (input.disabled) {
@@ -633,8 +730,7 @@
 
                 event.preventDefault();
                 const bounds = getInputBounds(input);
-                const deltaY = dragState.startY - event.clientY;
-                const steps = Math.trunc(deltaY / 10);
+                const steps = Math.trunc((dragState.startY - event.clientY) / 10);
                 const baseValue = Number.isFinite(dragState.startValue) ? dragState.startValue : bounds.min;
                 applySpinValue(input, baseValue + steps * bounds.step);
             });
@@ -656,7 +752,7 @@
         }
 
         function attachSpinControls() {
-            ["timeHourInput", "timeMinuteInput", "timeSecondInput", "paceMinuteInput", "paceSecondInput"].forEach(attachSpinInput);
+            spinInputIDs.forEach(attachSpinInput);
         }
 
         function loadWASM() {
@@ -681,23 +777,13 @@
         }
 
         document.addEventListener("DOMContentLoaded", function () {
-            const slider = $("#slider");
-            slider.ionRangeSlider({
-                skin: "round",
-                min: 0,
-                grid: true,
-                grid_num: 5,
-                from: 21097,
-                max: 200000,
-                step: 1,
-                disable: true,
-                onChange: function () {
-                    syncDistanceFromSlider();
-                    pace();
-                }
+            const slider = getSlider();
+
+            slider.addEventListener("input", function () {
+                syncDistanceFromSlider();
+                pace();
             });
 
-            sliderInstance = slider.data("ionRangeSlider");
             attachDistanceButtons();
             attachSpinControls();
 
@@ -712,7 +798,12 @@
             document.getElementById("paceSecondInput").addEventListener("input", time);
 
             setInputsDisabled(true);
-            updatePresetHighlight(Number(document.getElementById("distInput").value));
+
+            const initialDistance = Number(document.getElementById("distInput").value);
+            slider.value = initialDistance;
+            updateSliderReadout(initialDistance);
+            updatePresetHighlight(initialDistance);
+
             loadWASM();
         });
     </script>
@@ -725,92 +816,103 @@
             <p>Калькулятор темпа и финишного времени для беговых дистанций.</p>
         </div>
 
-        <div class="section-title">Distance</div>
+        <div class="section-title">Дистанция</div>
         <div class="field-group">
-            <div class="field-box" style="max-width: 210px;">
+            <div class="field-box dist-box">
                 <label for="distInput">Дистанция</label>
-                <div class="input-group">
-                    <input id="distInput" class="form-control disabled numeric-input" type="number" name="distInput" value="21097"
-                           min="0" step="1" disabled>
-                    <div class="input-group-append">
-                        <span class="input-group-text">метров</span>
-                    </div>
+                <div class="input-row">
+                    <input id="distInput" class="control numeric-input" type="number" name="distInput"
+                           value="21097" min="0" step="1" inputmode="numeric" disabled>
+                    <span class="unit">метров</span>
                 </div>
                 <p class="hint">Можно задать вручную или выбрать пресет.</p>
             </div>
-            <div class="field-box" style="min-width: 280px;">
-                <label for="slider">Выбор дистанции</label>
-                <input type="text" class="form-control" id="slider"/>
+            <div class="field-box slider-box">
+                <label for="slider">Выбор дистанции — <span id="sliderReadout" class="slider-readout">21 097 м</span></label>
+                <input type="range" class="slider-input" id="slider" min="0" max="200000" step="1" value="21097"
+                       aria-describedby="sliderReadout" disabled>
+                <div class="slider-scale" aria-hidden="true">
+                    <span>0</span>
+                    <span>50 км</span>
+                    <span>100 км</span>
+                    <span>150 км</span>
+                    <span>200 км</span>
+                </div>
             </div>
         </div>
 
         <div class="distance-buttons">
-            <button type="button" id="b1km" value="1000" class="btn btn-primary btn-sm disabled" disabled>1 км</button>
-            <button type="button" id="b3km" value="3000" class="btn btn-primary btn-sm disabled" disabled>3 км</button>
-            <button type="button" id="b5km" value="5000" class="btn btn-primary btn-sm disabled" disabled>5 км</button>
-            <button type="button" id="b10km" value="10000" class="btn btn-primary btn-sm disabled" disabled>10 км</button>
-            <button type="button" id="b21km" value="21097" class="btn btn-primary btn-sm disabled" disabled>Half Marathon</button>
-            <button type="button" id="b42km" value="42195" class="btn btn-primary btn-sm disabled" disabled>Marathon</button>
-            <button type="button" id="b50km" value="50000" class="btn btn-primary btn-sm disabled" disabled>50 км</button>
-            <button type="button" id="b50mile" value="80467" class="btn btn-primary btn-sm disabled" disabled>50 миль</button>
-            <button type="button" id="b100km" value="100000" class="btn btn-primary btn-sm disabled" disabled>100 км</button>
-            <button type="button" id="b100mile" value="160934" class="btn btn-primary btn-sm disabled" disabled>100 миль</button>
+            <button type="button" id="b1km" value="1000" class="preset-btn" disabled>1 км</button>
+            <button type="button" id="b3km" value="3000" class="preset-btn" disabled>3 км</button>
+            <button type="button" id="b5km" value="5000" class="preset-btn" disabled>5 км</button>
+            <button type="button" id="b10km" value="10000" class="preset-btn" disabled>10 км</button>
+            <button type="button" id="b21km" value="21097" class="preset-btn" disabled>Полумарафон</button>
+            <button type="button" id="b42km" value="42195" class="preset-btn" disabled>Марафон</button>
+            <button type="button" id="b50km" value="50000" class="preset-btn" disabled>50 км</button>
+            <button type="button" id="b50mile" value="80467" class="preset-btn" disabled>50 миль</button>
+            <button type="button" id="b100km" value="100000" class="preset-btn" disabled>100 км</button>
+            <button type="button" id="b100mile" value="160934" class="preset-btn" disabled>100 миль</button>
         </div>
 
-        <div class="section-title">Time</div>
+        <div class="section-title">Время</div>
         <div class="field-group">
             <div class="field-box compact-field">
                 <label for="timeHourInput">Часы</label>
                 <div class="spin-control">
-                    <button type="button" class="spin-btn spin-dec disabled" aria-label="Уменьшить часы" disabled>-</button>
-                    <input id="timeHourInput" class="form-control disabled numeric-input numeric-input-3" type="number" name="timeHour" value="1" min="0" max="999" inputmode="numeric" disabled>
-                    <button type="button" class="spin-btn spin-inc disabled" aria-label="Увеличить часы" disabled>+</button>
+                    <button type="button" class="spin-btn spin-dec" aria-label="Уменьшить часы" disabled>-</button>
+                    <input id="timeHourInput" class="control numeric-input numeric-input-3" type="number" name="timeHour"
+                           value="1" min="0" max="999" inputmode="numeric" disabled>
+                    <button type="button" class="spin-btn spin-inc" aria-label="Увеличить часы" disabled>+</button>
                     <span class="spin-unit">ч</span>
                 </div>
             </div>
             <div class="field-box compact-field">
                 <label for="timeMinuteInput">Минуты</label>
                 <div class="spin-control">
-                    <button type="button" class="spin-btn spin-dec disabled" aria-label="Уменьшить минуты" disabled>-</button>
-                    <input id="timeMinuteInput" class="form-control disabled numeric-input numeric-input-2" type="number" name="timeMinute" value="25" min="0" max="59" inputmode="numeric" disabled>
-                    <button type="button" class="spin-btn spin-inc disabled" aria-label="Увеличить минуты" disabled>+</button>
+                    <button type="button" class="spin-btn spin-dec" aria-label="Уменьшить минуты" disabled>-</button>
+                    <input id="timeMinuteInput" class="control numeric-input numeric-input-2" type="number" name="timeMinute"
+                           value="25" min="0" max="59" inputmode="numeric" disabled>
+                    <button type="button" class="spin-btn spin-inc" aria-label="Увеличить минуты" disabled>+</button>
                     <span class="spin-unit">м</span>
                 </div>
             </div>
             <div class="field-box compact-field">
                 <label for="timeSecondInput">Секунды</label>
                 <div class="spin-control">
-                    <button type="button" class="spin-btn spin-dec disabled" aria-label="Уменьшить секунды" disabled>-</button>
-                    <input id="timeSecondInput" class="form-control disabled numeric-input numeric-input-2" type="number" name="timeSecond" value="39" min="0" max="59" inputmode="numeric" disabled>
-                    <button type="button" class="spin-btn spin-inc disabled" aria-label="Увеличить секунды" disabled>+</button>
+                    <button type="button" class="spin-btn spin-dec" aria-label="Уменьшить секунды" disabled>-</button>
+                    <input id="timeSecondInput" class="control numeric-input numeric-input-2" type="number" name="timeSecond"
+                           value="39" min="0" max="59" inputmode="numeric" disabled>
+                    <button type="button" class="spin-btn spin-inc" aria-label="Увеличить секунды" disabled>+</button>
                     <span class="spin-unit">с</span>
                 </div>
             </div>
         </div>
 
-        <div class="section-title">Pace</div>
+        <div class="section-title">Темп</div>
         <div class="field-group">
             <div class="field-box compact-field">
                 <label for="paceMinuteInput">Минуты</label>
                 <div class="spin-control">
-                    <button type="button" class="spin-btn spin-dec disabled" aria-label="Уменьшить минуты темпа" disabled>-</button>
-                    <input id="paceMinuteInput" class="form-control disabled numeric-input numeric-input-3" type="number" name="paceMinute" value="4" min="0" max="999" inputmode="numeric" disabled>
-                    <button type="button" class="spin-btn spin-inc disabled" aria-label="Увеличить минуты темпа" disabled>+</button>
+                    <button type="button" class="spin-btn spin-dec" aria-label="Уменьшить минуты темпа" disabled>-</button>
+                    <input id="paceMinuteInput" class="control numeric-input numeric-input-3" type="number" name="paceMinute"
+                           value="4" min="0" max="999" inputmode="numeric" disabled>
+                    <button type="button" class="spin-btn spin-inc" aria-label="Увеличить минуты темпа" disabled>+</button>
                     <span class="spin-unit">м</span>
                 </div>
             </div>
             <div class="field-box compact-field">
                 <label for="paceSecondInput">Секунды</label>
                 <div class="spin-control">
-                    <button type="button" class="spin-btn spin-dec disabled" aria-label="Уменьшить секунды темпа" disabled>-</button>
-                    <input id="paceSecondInput" class="form-control disabled numeric-input numeric-input-2" type="number" name="paceSecond" value="4" min="0" max="59" inputmode="numeric" disabled>
-                    <button type="button" class="spin-btn spin-inc disabled" aria-label="Увеличить секунды темпа" disabled>+</button>
+                    <button type="button" class="spin-btn spin-dec" aria-label="Уменьшить секунды темпа" disabled>-</button>
+                    <input id="paceSecondInput" class="control numeric-input numeric-input-2" type="number" name="paceSecond"
+                           value="4" min="0" max="59" inputmode="numeric" disabled>
+                    <button type="button" class="spin-btn spin-inc" aria-label="Увеличить секунды темпа" disabled>+</button>
                     <span class="spin-unit">с</span>
                 </div>
             </div>
         </div>
 
-        <p id="errorMessage" class="error-text" aria-live="polite"></p>
+        <p id="errorMessage" class="error-text" role="status" aria-live="polite"></p>
     </div>
 </div>
 </body>
