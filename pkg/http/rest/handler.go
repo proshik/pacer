@@ -6,6 +6,7 @@ import (
 	"github.com/go-telegram/bot/models"
 	"github.com/klauspost/compress/gzhttp"
 	"gorun/pkg/calculator"
+	"gorun/pkg/history"
 	"gorun/pkg/telegram"
 	"io"
 	"io/fs"
@@ -36,6 +37,7 @@ func NewHandler(
 	tgToken string,
 	t *telegram.Service,
 	c calculator.Engine,
+	store *history.Store,
 	a fs.FS,
 ) (*http.ServeMux, error) {
 	serveMux := http.NewServeMux()
@@ -49,6 +51,9 @@ func NewHandler(
 	serveMux.HandleFunc("/api/v1/predict", handlePredict)
 	serveMux.HandleFunc("/api/v1/vdot", handleVDOT)
 	serveMux.HandleFunc("/api/v1/me", handleMe(tgToken))
+	serveMux.HandleFunc("GET /api/v1/runs", listRunsHandler(tgToken, store))
+	serveMux.HandleFunc("POST /api/v1/runs", saveRunHandler(tgToken, store))
+	serveMux.HandleFunc("DELETE /api/v1/runs/{id}", deleteRunHandler(tgToken, store))
 
 	if !debugMode {
 		// handle telegram web hook messages

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"gorun/pkg/calculator"
+	"gorun/pkg/history"
 	"gorun/pkg/http/rest"
 	"gorun/pkg/telegram"
 	"gorun/pkg/wasmcalc"
@@ -85,7 +86,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler, err := rest.NewHandler(debug, tgToken, t, c, assets)
+	store, err := openHistory(os.Getenv("DB_PATH"))
+	if err != nil {
+		slog.Error("startup failed", "err", err)
+		os.Exit(1)
+	}
+	slog.Info("saved runs history", "enabled", store != nil)
+
+	handler, err := rest.NewHandler(debug, tgToken, t, c, store, assets)
 	if err != nil {
 		slog.Error("http handler init failed", "err", err)
 		os.Exit(1)
@@ -138,6 +146,12 @@ func main() {
 		slog.Error("calculation engine shutdown failed", "err", err)
 	}
 
+	if store != nil {
+		if err := store.Close(); err != nil {
+			slog.Error("history database close failed", "err", err)
+		}
+	}
+
 	if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("server returned error after shutdown", "err", err)
 		os.Exit(1)
@@ -167,6 +181,22 @@ func newCalculationEngine(value string) (calculator.Engine, func(context.Context
 	default:
 		return nil, noop, fmt.Errorf("unknown CALC_ENGINE %q, want \"native\" or \"wasm\"", value)
 	}
+}
+
+// openHistory opens the saved-runs database when DB_PATH is set. Without it the
+// calculator works as before and only the history endpoints answer 503.
+func openHistory(path string) (*history.Store, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, nil
+	}
+
+	store, err := history.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open history database %q: %w", path, err)
+	}
+
+	return store, nil
 }
 
 func requiredEnv(key string) (string, error) {

@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"gorun/pkg/calculator"
+	"gorun/pkg/history"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,14 @@ func newTestHandler(t *testing.T) *http.ServeMux {
 func newTestHandlerWithMode(t *testing.T, debugMode bool) *http.ServeMux {
 	t.Helper()
 
+	return newTestHandlerWith(t, debugMode, nil)
+}
+
+// newTestHandlerWith builds the handler with the bot token "token"; a nil store
+// leaves the history endpoints unconfigured.
+func newTestHandlerWith(t *testing.T, debugMode bool, store *history.Store) *http.ServeMux {
+	t.Helper()
+
 	// крупнее MinSize компрессора, иначе сжатие не включится
 	page := []byte("<!doctype html><html><body>" + strings.Repeat("pacer ", 1000) + "</body></html>")
 
@@ -29,7 +38,7 @@ func newTestHandlerWithMode(t *testing.T, debugMode bool) *http.ServeMux {
 		"assets/index.html": &fstest.MapFile{Data: page},
 	}
 
-	handler, err := NewHandler(debugMode, "token", nil, calculator.NewService(), assets)
+	handler, err := NewHandler(debugMode, "token", nil, calculator.NewService(), store, assets)
 	if err != nil {
 		t.Fatalf("create test handler: %v", err)
 	}

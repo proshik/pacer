@@ -29,6 +29,12 @@ RUN addgroup -S app && adduser -S -G app app \
 
 COPY --from=builder /out/pacer /usr/local/bin/pacer
 
+# Saved Mini App runs live in SQLite under /data. Mount a volume there to keep
+# them across container re-creation; without DB_PATH the history is disabled.
+RUN mkdir -p /data && chown app:app /data
+ENV DB_PATH=/data/pacer.db
+VOLUME /data
+
 USER app
 EXPOSE 80
 

@@ -36,6 +36,8 @@
 - `DEBUG` (`true/false`, по умолчанию `false`)
 - `LOG_LEVEL` (`debug|info|warn|error`; если не задан, уровень берется из `DEBUG`)
 - `CALC_ENGINE` (`native` по умолчанию, либо `wasm`) — чем считать темп и время
+- `DB_PATH` — файл SQLite для расчётов, сохранённых в Mini App. Без него история отключена:
+  `/api/v1/runs` отвечает `503`, остальное работает. В Docker по умолчанию `/data/pacer.db`
 
 ### Приоритет источников конфигурации
 
@@ -107,6 +109,21 @@ VDOT — уравнения Дэниелса–Гилберта. Зоны: E —
 
 Эти три эндпоинта считают нативно — `CALC_ENGINE=wasm` на них пока не действует.
 
+### Mini App: пользователь и история
+
+Запросы подписываются данными запуска Telegram — заголовок `Authorization: tma <initData>`.
+Данные принимаются 24 часа с момента открытия приложения.
+
+```bash
+curl -H "Authorization: tma $INIT_DATA" http://localhost:8080/api/v1/me
+curl -H "Authorization: tma $INIT_DATA" http://localhost:8080/api/v1/runs
+curl -X POST -H "Authorization: tma $INIT_DATA" \
+  -d '{"distance":21097,"time_seconds":5928}' http://localhost:8080/api/v1/runs
+curl -X DELETE -H "Authorization: tma $INIT_DATA" http://localhost:8080/api/v1/runs/1
+```
+
+Хранятся дистанция и время — темп из них выводится. Чужую запись удалить нельзя: ответ `404`.
+
 ## Как собирается WASM
 
 Скрипт `build.sh` делает три вещи:
@@ -174,6 +191,7 @@ docker run --rm -p 8080:80 \
   -e TELEGRAM_TOKEN=token \
   -e HOST=http://localhost:8080 \
   -e DEBUG=true \
+  -v pacer-data:/data \
   gorun
 ```
 

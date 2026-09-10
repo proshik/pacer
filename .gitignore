@@ -108,3 +108,7 @@ go.work.sum
 # env file
 .env
 
+# локальная база истории расчётов
+*.db
+*.db-wal
+*.db-shm

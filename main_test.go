@@ -111,3 +111,19 @@ func TestNewCalculationEngineSelection(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenHistory(t *testing.T) {
+	store, err := openHistory("   ")
+	if err != nil || store != nil {
+		t.Fatalf("blank DB_PATH: store = %v, err = %v; want history disabled", store, err)
+	}
+
+	store, err = openHistory(filepath.Join(t.TempDir(), "pacer.db"))
+	if err != nil || store == nil {
+		t.Fatalf("temp DB_PATH: store = %v, err = %v; want an open store", store, err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Errorf("close: %v", err)
+	}
+}
