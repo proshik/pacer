@@ -45,6 +45,9 @@ func NewHandler(
 	// front end and any external caller reach it in every mode.
 	serveMux.HandleFunc("/api/v1/time", calculateTime(c))
 	serveMux.HandleFunc("/api/v1/pace", calculatePace(c))
+	serveMux.HandleFunc("/api/v1/splits", handleSplits)
+	serveMux.HandleFunc("/api/v1/predict", handlePredict)
+	serveMux.HandleFunc("/api/v1/vdot", handleVDOT)
 
 	if !debugMode {
 		// handle telegram web hook messages
