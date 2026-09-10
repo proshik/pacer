@@ -125,6 +125,28 @@
             border: 0;
         }
 
+        /* ---------- шапка: план забега словами ---------- */
+
+        .masthead-plan .wordmark {
+            margin: 0;
+            color: var(--ink);
+            font: 800 1rem/1 var(--display);
+            letter-spacing: -0.01em;
+        }
+
+        .masthead-plan .plan-line {
+            margin-top: 12px;
+            max-width: 15em;
+            font: 700 clamp(1.625rem, 7vw, 2.5rem)/1.12 var(--display);
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+            text-wrap: balance;
+        }
+
+        .masthead-plan #lede {
+            margin-top: 10px;
+        }
+
         /* ---------- дистанция ---------- */
 
         .distance-head {
@@ -1096,7 +1118,26 @@
             }
         }
 
+        // План забега словами, как его держит в голове бегун. Пока калькулятор не
+        // готов, темп в полях ещё не пересчитан — показывается только «дистанция
+        // за время». Неразрывные пробелы держат вместе «10 км» и «это 4:30», а тире
+        // не начинает строку — перенос приходится на место после тире.
+        function updateHeader() {
+            const dist = Number(byId("distInput").value);
+            const total = timeSeconds();
+            if (!(dist > 0 && total > 0)) {
+                return;
+            }
+
+            const lead = `${distanceName(dist).replace(" ", "\u00a0")} за ${formatClock(total)}`;
+            const pacePerKm = paceSeconds();
+            byId("planLine").textContent = document.body.dataset.state === "ready" && pacePerKm > 0
+                ? `${lead}\u00a0— это\u00a0${formatClock(pacePerKm)} на километр`
+                : lead;
+        }
+
         function afterCalculation() {
+            updateHeader();
             updateShareURL();
             renderAnalysis();
             announce();
@@ -1611,6 +1652,7 @@
             document.querySelector(".presets").addEventListener("scroll", updatePresetFades, {passive: true});
             window.addEventListener("resize", updatePresetFades);
             updatePresetFades();
+            updateHeader();
 
             loadWASM();
             startTelegram();
@@ -1619,8 +1661,9 @@
 </head>
 <body data-state="loading">
 <main class="shell">
-    <header class="masthead">
-        <h1>Pacer</h1>
+    <header class="masthead masthead-plan">
+        <p class="wordmark">Pacer</p>
+        <h1 id="planLine" class="plan-line">Полумарафон за 1:25:39</h1>
         <p id="lede">Задайте дистанцию и время или темп — второе посчитается само.</p>
     </header>
 
