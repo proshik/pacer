@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"gorun/pkg/analysis"
 	"gorun/pkg/calculator"
 	"strconv"
 	"syscall/js"
@@ -143,6 +144,88 @@ func timeWrapper(c *calculator.Service) js.Func {
 	})
 }
 
+// numberArgs reads every argument as an integer, refusing anything that is not
+// a JS number: js.Value.Int panics on other types, which would kill the module.
+func numberArgs(args []js.Value) ([]int, bool) {
+	values := make([]int, len(args))
+	for i, arg := range args {
+		if arg.Type() != js.TypeNumber {
+			return nil, false
+		}
+		values[i] = arg.Int()
+	}
+
+	return values, true
+}
+
+func marshalResult(result any) string {
+	b, err := json.Marshal(result)
+	if err != nil {
+		return defaultError
+	}
+
+	return string(b)
+}
+
+// splitsWrapper exposes calcSplits(distMeters, raceSeconds, stepMeters).
+//
+// It takes the finish time rather than a pace so the last split equals the time
+// the page shows: a pace rounded to whole seconds drifts by several seconds over
+// a half marathon. The JSON matches GET /api/v1/splits, because both come from
+// pkg/analysis.
+func splitsWrapper() js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		values, ok := numberArgs(args)
+		if !ok || len(values) != 3 {
+			return buildErrorResult("calcSplits expects 3 numbers: distance, race seconds, step")
+		}
+
+		dist, raceSeconds, step := values[0], values[1], values[2]
+		if dist <= 0 || raceSeconds <= 0 || step <= 0 {
+			return buildErrorResult("Distance, time and step should be greater than zero")
+		}
+		if dist/step > analysis.MaxSplits {
+			return buildErrorResult("Too many splits, use a larger step")
+		}
+
+		pace := time.Duration(float64(raceSeconds) * float64(time.Second) * 1000 / float64(dist))
+
+		return marshalResult(analysis.Splits(dist, pace, step))
+	})
+}
+
+// predictWrapper exposes calcPredict(distMeters, raceSeconds); the JSON matches
+// GET /api/v1/predict.
+func predictWrapper() js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		values, ok := numberArgs(args)
+		if !ok || len(values) != 2 {
+			return buildErrorResult("calcPredict expects 2 numbers: distance, race seconds")
+		}
+		if values[0] <= 0 || values[1] <= 0 {
+			return buildErrorResult("Distance and time should be greater than zero")
+		}
+
+		return marshalResult(analysis.Predict(values[0], time.Duration(values[1])*time.Second))
+	})
+}
+
+// vdotWrapper exposes calcVDOT(distMeters, raceSeconds); the JSON matches
+// GET /api/v1/vdot.
+func vdotWrapper() js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		values, ok := numberArgs(args)
+		if !ok || len(values) != 2 {
+			return buildErrorResult("calcVDOT expects 2 numbers: distance, race seconds")
+		}
+		if values[0] <= 0 || values[1] <= 0 {
+			return buildErrorResult("Distance and time should be greater than zero")
+		}
+
+		return marshalResult(analysis.VDOTAnalysis(values[0], time.Duration(values[1])*time.Second))
+	})
+}
+
 func buildErrorResult(message string) string {
 	b, err := json.Marshal(CalcResult{"", "", "", message})
 	if err != nil {
@@ -159,6 +242,9 @@ func main() {
 
 	js.Global().Set("calcPace", paceWrapper(c))
 	js.Global().Set("calcTime", timeWrapper(c))
+	js.Global().Set("calcSplits", splitsWrapper())
+	js.Global().Set("calcPredict", predictWrapper())
+	js.Global().Set("calcVDOT", vdotWrapper())
 
 	<-make(chan bool)
 }

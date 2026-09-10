@@ -5,6 +5,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"gorun/pkg/analysis"
+)
+
+// The response types live in pkg/analysis so the browser wasm module returns
+// the same JSON; these aliases keep the tests reading in HTTP terms.
+type (
+	durationValue   = analysis.Duration
+	splitJSON       = analysis.Split
+	splitsResponse  = analysis.SplitsResult
+	predictResponse = analysis.PredictResult
+	vdotResponse    = analysis.VDOTResult
+	equivalentJSON  = analysis.Equivalent
 )
 
 func nearSeconds(got int, want int, tolerance int) bool {
