@@ -255,7 +255,10 @@
         }
 
         #distInput {
-            width: 8ch;
+            /* ровно шесть цифр плюс поля: 200000 помещается целиком */
+            width: calc(6ch + 22px);
+            -moz-appearance: textfield;
+            appearance: textfield;
             min-height: 44px;
             padding: 0 10px;
             border: 1px solid var(--line);
@@ -265,6 +268,12 @@
             font: 600 1rem/1 var(--text);
             font-variant-numeric: tabular-nums;
             text-align: right;
+        }
+
+        #distInput::-webkit-outer-spin-button,
+        #distInput::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
 
         #distInput:focus-visible {
@@ -303,42 +312,42 @@
             display: inline;
         }
 
+        /*
+         * Цифры стоят как на табло: ширину разряда задаёт сама цифра, а не
+         * стрелки, и цифры, двоеточия и «/км» сидят на одной базовой линии.
+         */
         .clock {
             --clock-size: clamp(2.75rem, 12vw, 4.25rem);
             display: flex;
-            align-items: center;
+            align-items: baseline;
             margin-top: 2px;
             font: 700 var(--clock-size)/1 var(--display);
-            letter-spacing: -0.02em;
+            letter-spacing: 0;
             font-variant-numeric: tabular-nums;
         }
 
         .colon {
-            margin-inline: 0.02em;
             color: var(--ink-soft);
             font-weight: 500;
         }
 
         .clock-unit {
-            /* на базовой линии цифр, а не у нижних стрелок */
-            align-self: center;
-            margin: calc(var(--clock-size) * 0.72 - 12px) 0 0 0.35em;
+            margin-left: 0.35em;
             color: var(--ink-soft);
             font: 600 1.125rem/1 var(--text);
-            letter-spacing: 0;
         }
 
+        /* стрелки вынесены из потока: сверху и снизу поля, по центру разряда */
         .segment {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            position: relative;
+            padding-block: 44px;
         }
 
         .segment-value {
-            width: 2.2ch;
+            width: 2ch;
             padding: 0;
             border: 0;
-            border-radius: 6px;
+            border-radius: 4px;
             background: transparent;
             color: var(--ink);
             font: inherit;
@@ -346,11 +355,24 @@
             font-variant-numeric: inherit;
             text-align: center;
             touch-action: none;
+            height: 1em;
+            vertical-align: top;
         }
 
-        /* рассчитанное число подчёркнуто разметкой, введённое — нет */
-        .readout.is-derived .segment-value {
-            background: linear-gradient(transparent 80%, var(--mark) 80%, var(--mark) 93%, transparent 93%);
+        .clock-digits {
+            display: inline-flex;
+            align-items: baseline;
+        }
+
+        /*
+         * Рассчитанное число подчёркнуто разметкой — одной линией под всеми
+         * цифрами и двоеточиями. Линия лежит на нижней кромке строки с цифрами,
+         * над зоной нижних стрелок (44px).
+         */
+        .readout.is-derived .clock-digits {
+            background: linear-gradient(var(--mark), var(--mark)) no-repeat;
+            background-size: 100% 0.09em;
+            background-position: 0 calc(100% - 44px);
         }
 
         .segment-value:focus-visible {
@@ -363,11 +385,13 @@
         }
 
         .spin-btn {
+            position: absolute;
+            left: 50%;
             display: grid;
             place-items: center;
-            width: 100%;
-            min-width: 44px;
+            width: 44px;
             height: 44px;
+            margin-left: -22px;
             padding: 0;
             border: 0;
             border-radius: 8px;
@@ -382,6 +406,14 @@
             height: 10px;
             border: solid currentColor;
             border-width: 2px 2px 0 0;
+        }
+
+        .spin-inc {
+            top: 0;
+        }
+
+        .spin-dec {
+            bottom: 0;
         }
 
         .spin-inc::before {
@@ -686,6 +718,22 @@
                 scrollbar-width: none;
             }
 
+            /* затухание у края, за которым есть ещё кнопки */
+            .presets.fade-end {
+                -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+                mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+            }
+
+            .presets.fade-start {
+                -webkit-mask-image: linear-gradient(to right, transparent, #000 48px);
+                mask-image: linear-gradient(to right, transparent, #000 48px);
+            }
+
+            .presets.fade-start.fade-end {
+                -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+                mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+            }
+
             .presets::-webkit-scrollbar {
                 display: none;
             }
@@ -788,8 +836,17 @@
         }
 
         // Ширина поля по числу цифр, чтобы 1:25:39 читалось как одно число.
+        // Ширина поля — ровно по цифрам: табличные цифры по 1ch, поэтому
+        // подчёркивание рассчитанного числа идёт одной линией через двоеточия.
         function autosize(input) {
-            input.style.width = (Math.max(input.value.length, 1) + 0.2) + "ch";
+            input.style.width = Math.max(input.value.length, 1) + "ch";
+        }
+
+        function updatePresetFades() {
+            const row = document.querySelector(".presets");
+            const scrollable = row.scrollWidth > row.clientWidth + 1;
+            row.classList.toggle("fade-start", scrollable && row.scrollLeft > 1);
+            row.classList.toggle("fade-end", scrollable && row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
         }
 
         function tidySegment(input) {
@@ -1248,6 +1305,8 @@
             startPressRepeat(container.querySelector(".spin-inc"), input, 1);
 
             input.addEventListener("input", () => autosize(input));
+            // Tab приводит в поле с выделенным числом: новое значение вписывается поверх.
+            input.addEventListener("focus", () => input.select());
             input.addEventListener("blur", () => tidySegment(input));
 
             input.addEventListener("keydown", (event) => {
@@ -1556,6 +1615,10 @@
             updateSliderReadout(initialDistance);
             updatePresetHighlight(initialDistance);
 
+            document.querySelector(".presets").addEventListener("scroll", updatePresetFades, {passive: true});
+            window.addEventListener("resize", updatePresetFades);
+            updatePresetFades();
+
             loadWASM();
             startTelegram();
         });
@@ -1602,25 +1665,27 @@
         <div class="readout" id="timeReadout" role="group" aria-labelledby="time-title">
             <h2 class="readout-label" id="time-title">Время <span class="derived-note">рассчитано</span></h2>
             <div class="clock">
+                <div class="clock-digits">
                 <div class="segment spin-control">
-                    <button type="button" class="spin-btn spin-inc" aria-label="Больше часов" disabled></button>
+                    <button type="button" class="spin-btn spin-inc" tabindex="-1" aria-label="Больше часов" disabled></button>
                     <input id="timeHourInput" class="segment-value" type="text" name="timeHour" value="1"
                            min="0" max="999" inputmode="numeric" autocomplete="off" aria-label="Часы" disabled>
-                    <button type="button" class="spin-btn spin-dec" aria-label="Меньше часов" disabled></button>
+                    <button type="button" class="spin-btn spin-dec" tabindex="-1" aria-label="Меньше часов" disabled></button>
                 </div>
                 <span class="colon" aria-hidden="true">:</span>
                 <div class="segment spin-control">
-                    <button type="button" class="spin-btn spin-inc" aria-label="Больше минут" disabled></button>
+                    <button type="button" class="spin-btn spin-inc" tabindex="-1" aria-label="Больше минут" disabled></button>
                     <input id="timeMinuteInput" class="segment-value" type="text" name="timeMinute" value="25"
                            min="0" max="59" inputmode="numeric" autocomplete="off" aria-label="Минуты" disabled>
-                    <button type="button" class="spin-btn spin-dec" aria-label="Меньше минут" disabled></button>
+                    <button type="button" class="spin-btn spin-dec" tabindex="-1" aria-label="Меньше минут" disabled></button>
                 </div>
                 <span class="colon" aria-hidden="true">:</span>
                 <div class="segment spin-control">
-                    <button type="button" class="spin-btn spin-inc" aria-label="Больше секунд" disabled></button>
+                    <button type="button" class="spin-btn spin-inc" tabindex="-1" aria-label="Больше секунд" disabled></button>
                     <input id="timeSecondInput" class="segment-value" type="text" name="timeSecond" value="39"
                            min="0" max="59" inputmode="numeric" autocomplete="off" aria-label="Секунды" disabled>
-                    <button type="button" class="spin-btn spin-dec" aria-label="Меньше секунд" disabled></button>
+                    <button type="button" class="spin-btn spin-dec" tabindex="-1" aria-label="Меньше секунд" disabled></button>
+                </div>
                 </div>
             </div>
         </div>
@@ -1628,18 +1693,20 @@
         <div class="readout is-derived" id="paceReadout" role="group" aria-labelledby="pace-title">
             <h2 class="readout-label" id="pace-title">Темп <span class="derived-note">рассчитан</span></h2>
             <div class="clock">
+                <div class="clock-digits">
                 <div class="segment spin-control">
-                    <button type="button" class="spin-btn spin-inc" aria-label="Больше минут темпа" disabled></button>
+                    <button type="button" class="spin-btn spin-inc" tabindex="-1" aria-label="Больше минут темпа" disabled></button>
                     <input id="paceMinuteInput" class="segment-value" type="text" name="paceMinute" value="4"
                            min="0" max="999" inputmode="numeric" autocomplete="off" aria-label="Минуты темпа" disabled>
-                    <button type="button" class="spin-btn spin-dec" aria-label="Меньше минут темпа" disabled></button>
+                    <button type="button" class="spin-btn spin-dec" tabindex="-1" aria-label="Меньше минут темпа" disabled></button>
                 </div>
                 <span class="colon" aria-hidden="true">:</span>
                 <div class="segment spin-control">
-                    <button type="button" class="spin-btn spin-inc" aria-label="Больше секунд темпа" disabled></button>
+                    <button type="button" class="spin-btn spin-inc" tabindex="-1" aria-label="Больше секунд темпа" disabled></button>
                     <input id="paceSecondInput" class="segment-value" type="text" name="paceSecond" value="04"
                            min="0" max="59" inputmode="numeric" autocomplete="off" aria-label="Секунды темпа" disabled>
-                    <button type="button" class="spin-btn spin-dec" aria-label="Меньше секунд темпа" disabled></button>
+                    <button type="button" class="spin-btn spin-dec" tabindex="-1" aria-label="Меньше секунд темпа" disabled></button>
+                </div>
                 </div>
                 <span class="clock-unit">/км</span>
             </div>
