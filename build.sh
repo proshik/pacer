@@ -16,7 +16,8 @@ WASM_COMPILER="${WASM_COMPILER:-tinygo}"
 case "${WASM_COMPILER}" in
 tinygo)
 	if ! command -v tinygo >/dev/null 2>&1; then
-		echo "tinygo not found. Install it (brew tap tinygo-org/tools && brew install tinygo)" >&2
+		echo "tinygo not found. Install it: brew tap tinygo-org/tools &&" >&2
+		echo "  brew trust --formula tinygo-org/tools/tinygo && brew install tinygo" >&2
 		echo "or build with the standard toolchain: WASM_COMPILER=go ./build.sh" >&2
 		exit 1
 	fi
