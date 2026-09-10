@@ -3,7 +3,7 @@ package rest
 import (
 	"encoding/json"
 	"fmt"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/go-telegram/bot/models"
 	"github.com/klauspost/compress/gzhttp"
 	"gorun/pkg/calculator"
 	"gorun/pkg/telegram"
@@ -149,7 +149,7 @@ func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		var update tgbotapi.Update
+		var update models.Update
 		if err = json.Unmarshal(data, &update); err != nil {
 			slog.Warn("decode webhook update failed", "err", err, "remote_addr", r.RemoteAddr)
 			writeJSONError(w, http.StatusBadRequest, "invalid telegram update payload", nil)
@@ -162,7 +162,7 @@ func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		t.DoUpdate(update)
+		t.DoUpdate(&update)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	}

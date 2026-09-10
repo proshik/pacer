@@ -79,7 +79,7 @@ func main() {
 	}
 	slog.Info("calculation engine selected", "engine", cmp.Or(strings.ToLower(strings.TrimSpace(engineName)), "native"))
 
-	t, err := telegram.NewService(debug, host, tgToken, c)
+	t, err := telegram.NewService(context.Background(), debug, host, tgToken, c)
 	if err != nil {
 		slog.Error("telegram service init failed", "err", err)
 		os.Exit(1)

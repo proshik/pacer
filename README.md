@@ -32,9 +32,10 @@
 - `TELEGRAM_TOKEN`
 - `HOST`
 
-Опциональная:
+Опциональные:
 - `DEBUG` (`true/false`, по умолчанию `false`)
 - `LOG_LEVEL` (`debug|info|warn|error`; если не задан, уровень берется из `DEBUG`)
+- `CALC_ENGINE` (`native` по умолчанию, либо `wasm`) — чем считать темп и время
 
 ### Приоритет источников конфигурации
 
@@ -69,11 +70,31 @@ go run .
 PORT=8080 TELEGRAM_TOKEN=token HOST=http://localhost:8080 DEBUG=true go run .
 ```
 
+## HTTP API
+
+Доступен в обоих режимах (`DEBUG` на него не влияет):
+
+```bash
+curl "http://localhost:8080/api/v1/time?dist=21097&pace=4m50s"
+curl "http://localhost:8080/api/v1/pace?dist=21097&time=1h38m48s"
+curl "http://localhost:8080/healthz"
+```
+
+Ответ:
+
+```json
+{"result":"1h41m57s","total_seconds":6117,"hours":1,"minutes":41,"seconds":57}
+```
+
+При ошибке валидации возвращается `400` и `{"error":"validation failed","details":{...}}`.
+
 ## Как собирается WASM
 
-Скрипт `build.sh` делает две вещи:
+Скрипт `build.sh` делает три вещи:
 1. Копирует `wasm_exec.js` из текущего Go SDK в `assets/`.
-2. Собирает `cmd/wasm` в `assets/json.wasm` с `GOOS=js GOARCH=wasm`.
+2. Собирает `cmd/wasm` в `assets/json.wasm` (`GOOS=js GOARCH=wasm`) — это код для браузера.
+3. Собирает `cmd/calcwasm` в `pkg/wasmcalc/calc.wasm` (`GOOS=wasip1 GOARCH=wasm`,
+   `-buildmode=c-shared`) — WASI-reactor для сервера.
 
 Запуск:
 
@@ -81,31 +102,49 @@ PORT=8080 TELEGRAM_TOKEN=token HOST=http://localhost:8080 DEBUG=true go run .
 ./build.sh
 ```
 
-Ручная эквивалентная команда:
+Ручные эквивалентные команды:
 
 ```bash
 GOOS=js GOARCH=wasm go build -o assets/json.wasm ./cmd/wasm
+GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o pkg/wasmcalc/calc.wasm ./cmd/calcwasm
 ```
 
-Примечание: пакет `cmd/wasm` имеет build-tags `js/wasm`, поэтому обычный `go run ./cmd/wasm` не запускает WASM-версию. Для удобства в не-WASM окружении есть fallback `main_nowasm.go` с подсказкой.
+Примечание: у обоих wasm-пакетов есть build-tags, поэтому обычный `go run ./cmd/wasm` не
+запускает WASM-версию. Для удобства в не-WASM окружении рядом лежит fallback `main_nowasm.go`
+с подсказкой.
+
+## Один артефакт в двух хостах
+
+`pkg/calculator` — единственное место, где живут формулы. Браузер исполняет их как WASM, и
+сервер умеет делать то же самое: при `CALC_ENGINE=wasm` он через wazero запускает
+`pkg/wasmcalc/calc.wasm`, собранный из того же пакета.
+
+Смысл — исключить расхождение между ботом, API и страницей: это один скомпилированный
+артефакт, а не две копии кода на разных языках. Эквивалентность нативного и wasm-движка
+проверяется тестом в `pkg/wasmcalc`.
+
+По умолчанию используется `native` — wazero не нужен для обычной работы, он включается
+осознанно.
 
 ## Рекомендуемый цикл разработки
 
 1. Изменили backend (`main.go`, `pkg/...`) -> `go run .`
-2. Изменили WASM-логику (`cmd/wasm/...`) -> `./build.sh`, затем перезапуск сервера/обновление страницы.
+2. Изменили WASM-логику (`cmd/wasm/...`, `cmd/calcwasm/...`, `pkg/calculator/...`) ->
+   `./build.sh`, затем перезапуск сервера/обновление страницы.
 3. Перед коммитом:
 
 ```bash
-go test ./ ./pkg/...
+go test -race ./ ./pkg/...
 go vet ./ ./pkg/...
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...
 go build ./ ./pkg/...
 ./build.sh
 ```
 
 ## Production / Docker
 
-Текущий `Dockerfile` собирает только backend binary (`/pacer`) и запускает его.
-WASM-файлы должны уже лежать в `assets/` в актуальном состоянии к моменту `docker build`.
+`Dockerfile` многоступенчатый: сначала внутри образа собираются оба wasm-артефакта, затем
+backend binary (`/pacer`), который их встраивает.
 
 Сборка и запуск контейнера:
 

@@ -5,116 +5,122 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+
 	"gorun/pkg/calculator"
 )
 
-const TgApiURL = "https://api.telegram.org"
-
-const TgMethodSetWebhook = "setWebhook"
-const TgMethodDeleteWebhook = "deleteWebhook"
+// Queue sizes. Enqueues are non blocking: when a queue is full the update is
+// dropped with a warning rather than stalling the webhook handler, which must
+// answer Telegram promptly.
+const (
+	updateQueueSize  = 64
+	messageQueueSize = 128
+)
 
 type Service struct {
-	bot        *tgbotapi.BotAPI
+	bot        *bot.Bot
 	calculator calculator.Engine
 
-	startC   chan tgbotapi.Update
-	timeC    chan tgbotapi.Update
-	paceC    chan tgbotapi.Update
-	unknownC chan tgbotapi.Update
-	messages chan tgbotapi.Chattable
+	startC   chan *models.Update
+	timeC    chan *models.Update
+	paceC    chan *models.Update
+	unknownC chan *models.Update
+	messages chan *bot.SendMessageParams
 	done     chan struct{}
 
-	polling  bool
-	stopOnce sync.Once
-	wg       sync.WaitGroup
+	polling       bool
+	cancelPolling context.CancelFunc
+	stopOnce      sync.Once
+	wg            sync.WaitGroup
 }
 
-func NewService(debugMode bool, host string, token string, calculator calculator.Engine) (*Service, error) {
-	bot, err := tgbotapi.NewBotAPI(token)
+// newService builds the queues without touching the network, so tests can
+// exercise routing and handlers without a bot client.
+func newService(engine calculator.Engine) *Service {
+	return &Service{
+		calculator: engine,
+		startC:     make(chan *models.Update, updateQueueSize),
+		timeC:      make(chan *models.Update, updateQueueSize),
+		paceC:      make(chan *models.Update, updateQueueSize),
+		unknownC:   make(chan *models.Update, updateQueueSize),
+		messages:   make(chan *bot.SendMessageParams, messageQueueSize),
+		done:       make(chan struct{}),
+	}
+}
+
+// NewService connects to Telegram and starts the worker goroutines.
+//
+// In debug mode any webhook is removed and updates are long polled; otherwise
+// a webhook pointing at host is registered.
+func NewService(ctx context.Context, debugMode bool, host string, token string, engine calculator.Engine) (*Service, error) {
+	s := newService(engine)
+
+	client, err := bot.New(token, bot.WithDefaultHandler(
+		func(_ context.Context, _ *bot.Bot, update *models.Update) {
+			s.handleUpdate(update)
+		},
+	))
 	if err != nil {
 		return nil, fmt.Errorf("create telegram bot api client: %w", err)
 	}
 
-	bot.Debug = debugMode
-
-	s := &Service{
-		bot:        bot,
-		calculator: calculator,
-		startC:     make(chan tgbotapi.Update, 64),
-		timeC:      make(chan tgbotapi.Update, 64),
-		paceC:      make(chan tgbotapi.Update, 64),
-		unknownC:   make(chan tgbotapi.Update, 64),
-		messages:   make(chan tgbotapi.Chattable, 128),
-		done:       make(chan struct{}),
-	}
-
-	slog.Info("telegram bot authorized", "username", bot.Self.UserName, "debug_mode", debugMode)
-
+	s.bot = client
 	s.startDispatcher()
 	s.startSender()
 
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-
 	if debugMode {
-		deleteWebhookURL := fmt.Sprintf("%s/bot%s/%s?drop_pending_updates=true", TgApiURL, token, TgMethodDeleteWebhook)
-		if err := callTelegramAPI(httpClient, deleteWebhookURL); err != nil {
+		if _, err := client.DeleteWebhook(ctx, &bot.DeleteWebhookParams{DropPendingUpdates: true}); err != nil {
 			return nil, fmt.Errorf("delete webhook in debug mode: %w", err)
 		}
 
-		u := tgbotapi.NewUpdate(0)
-		u.Timeout = 60
-
-		updates, err := bot.GetUpdatesChan(u)
-		if err != nil {
-			return nil, fmt.Errorf("start telegram polling updates: %w", err)
-		}
-
+		pollCtx, cancel := context.WithCancel(context.Background())
+		s.cancelPolling = cancel
 		s.polling = true
-		s.startPolling(updates)
+
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			client.Start(pollCtx)
+		}()
+
 		slog.Info("telegram polling started")
-	} else {
-		webhookURL, err := buildWebhookURL(host, token)
-		if err != nil {
-			return nil, fmt.Errorf("build webhook url: %w", err)
-		}
 
-		setWebhookURL := fmt.Sprintf(
-			"%s/bot%s/%s?%s",
-			TgApiURL,
-			token,
-			TgMethodSetWebhook,
-			url.Values{"url": []string{webhookURL}}.Encode(),
-		)
-
-		if err := callTelegramAPI(httpClient, setWebhookURL); err != nil {
-			return nil, fmt.Errorf("set webhook: %w", err)
-		}
-
-		slog.Info("telegram webhook configured", "host", host)
+		return s, nil
 	}
+
+	webhookURL, err := buildWebhookURL(host, token)
+	if err != nil {
+		return nil, fmt.Errorf("build webhook url: %w", err)
+	}
+
+	if _, err := client.SetWebhook(ctx, &bot.SetWebhookParams{URL: webhookURL}); err != nil {
+		return nil, fmt.Errorf("set webhook: %w", err)
+	}
+
+	slog.Info("telegram webhook configured", "host", host)
 
 	return s, nil
 }
 
-func (s *Service) DoUpdate(update tgbotapi.Update) {
+// DoUpdate feeds an update that arrived over the webhook.
+func (s *Service) DoUpdate(update *models.Update) {
 	s.handleUpdate(update)
 }
 
 func (s *Service) Close(ctx context.Context) error {
 	s.stopOnce.Do(func() {
 		close(s.done)
-		if s.polling {
-			s.bot.StopReceivingUpdates()
+		if s.cancelPolling != nil {
+			s.cancelPolling()
 		}
 	})
 
@@ -133,31 +139,59 @@ func (s *Service) Close(ctx context.Context) error {
 	}
 }
 
-func (s *Service) handleUpdate(update tgbotapi.Update) {
-	if update.Message != nil && update.Message.IsCommand() {
-		command := update.Message.Command()
-		switch command {
-		case "start":
-			s.enqueueUpdate(s.startC, command, update)
-		case "time":
-			s.enqueueUpdate(s.timeC, command, update)
-		case "pace":
-			s.enqueueUpdate(s.paceC, command, update)
-		default:
-			s.enqueueUpdate(s.unknownC, command, update)
-		}
-		return
+// parseCommand extracts a bot command and its arguments from a message.
+//
+// go-telegram/bot ships no equivalent of the old IsCommand/Command helpers, so
+// the bot_command entity Telegram places at offset 0 is decoded here. Offsets
+// are UTF-16 units, which matches byte offsets for the ASCII command token.
+func parseCommand(message *models.Message) (command string, arguments string) {
+	if message == nil || len(message.Entities) == 0 {
+		return "", ""
 	}
 
-	if update.Message != nil {
-		s.enqueueUpdate(s.startC, "message", update)
-		return
+	entity := message.Entities[0]
+	if entity.Type != models.MessageEntityTypeBotCommand || entity.Offset != 0 {
+		return "", ""
 	}
 
-	slog.Debug("telegram update ignored: message is nil")
+	if entity.Length < 1 || entity.Length > len(message.Text) {
+		return "", ""
+	}
+
+	command = message.Text[1:entity.Length]
+	if at := strings.Index(command, "@"); at != -1 {
+		command = command[:at]
+	}
+
+	if len(message.Text) > entity.Length {
+		arguments = message.Text[entity.Length+1:]
+	}
+
+	return command, arguments
 }
 
-func (s *Service) enqueueUpdate(ch chan tgbotapi.Update, source string, update tgbotapi.Update) {
+func (s *Service) handleUpdate(update *models.Update) {
+	if update == nil || update.Message == nil {
+		slog.Debug("telegram update ignored: message is nil")
+		return
+	}
+
+	command, _ := parseCommand(update.Message)
+	switch command {
+	case "":
+		s.enqueueUpdate(s.startC, "message", update)
+	case "start":
+		s.enqueueUpdate(s.startC, command, update)
+	case "time":
+		s.enqueueUpdate(s.timeC, command, update)
+	case "pace":
+		s.enqueueUpdate(s.paceC, command, update)
+	default:
+		s.enqueueUpdate(s.unknownC, command, update)
+	}
+}
+
+func (s *Service) enqueueUpdate(ch chan *models.Update, source string, update *models.Update) {
 	select {
 	case <-s.done:
 		return
@@ -167,7 +201,7 @@ func (s *Service) enqueueUpdate(ch chan tgbotapi.Update, source string, update t
 	}
 }
 
-func (s *Service) enqueueMessage(message tgbotapi.Chattable) {
+func (s *Service) enqueueMessage(message *bot.SendMessageParams) {
 	select {
 	case <-s.done:
 		return
@@ -187,13 +221,13 @@ func (s *Service) startDispatcher() {
 			case <-s.done:
 				return
 			case u := <-s.startC:
-				s.enqueueMessage(handleStartCmd(&u))
+				s.enqueueMessage(handleStartCmd(u))
 			case u := <-s.timeC:
-				s.enqueueMessage(s.handleTimeCmd(&u))
+				s.enqueueMessage(s.handleTimeCmd(u))
 			case u := <-s.paceC:
-				s.enqueueMessage(s.handlePaceCmd(&u))
+				s.enqueueMessage(s.handlePaceCmd(u))
 			case u := <-s.unknownC:
-				s.enqueueMessage(handleUnknownCmd(&u))
+				s.enqueueMessage(handleUnknownCmd(u))
 			}
 		}
 	}()
@@ -209,46 +243,14 @@ func (s *Service) startSender() {
 			case <-s.done:
 				return
 			case msg := <-s.messages:
-				if _, err := s.bot.Send(msg); err != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				if _, err := s.bot.SendMessage(ctx, msg); err != nil {
 					slog.Error("send telegram message failed", "err", err)
 				}
+				cancel()
 			}
 		}
 	}()
-}
-
-func (s *Service) startPolling(updates tgbotapi.UpdatesChannel) {
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-
-		for {
-			select {
-			case <-s.done:
-				return
-			case update, ok := <-updates:
-				if !ok {
-					return
-				}
-				s.handleUpdate(update)
-			}
-		}
-	}()
-}
-
-func callTelegramAPI(client *http.Client, url string) error {
-	resp, err := client.Get(url)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	return nil
 }
 
 func buildWebhookURL(host, token string) (string, error) {
@@ -285,31 +287,26 @@ func buildWebhookURL(host, token string) (string, error) {
 	return webhookURL.String(), nil
 }
 
-func handleStartCmd(update *tgbotapi.Update) tgbotapi.Chattable {
-	buf := bytes.NewBufferString("Calculate Your Running Pace")
+func handleStartCmd(update *models.Update) *bot.SendMessageParams {
+	buf := bytes.NewBufferString("Calculate Your Running Pace\n")
 
-	buf.WriteString("\n")
-	buf.WriteString("Please, enter of the following commands:\n\n")
-	buf.WriteString(
-		"[/time]() - calculate time, e.g. */time 4m50s 21095*, where first - pace, second - distance\n",
-	)
-	buf.WriteString(
-		"[/pace]() - calculate pace, e.g. */pace 21097 1h38m48s*, where first - distance, second - time\n",
-	)
+	buf.WriteString("Please, enter one of the following commands:\n\n")
+	buf.WriteString("/time - calculate time, e.g. /time 4m50s 21095, where first - pace, second - distance\n")
+	buf.WriteString("/pace - calculate pace, e.g. /pace 21097 1h38m48s, where first - distance, second - time\n")
 
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, buf.String())
-	msg.ParseMode = "markdown"
-	return msg
+	return buildMsg(update, buf.String())
 }
 
-func handleUnknownCmd(update *tgbotapi.Update) tgbotapi.Chattable {
+func handleUnknownCmd(update *models.Update) *bot.SendMessageParams {
+	command, _ := parseCommand(update.Message)
+
 	return buildMsg(update, fmt.Sprintf(
 		"Unknown command: /%s\n\nAvailable commands: /start, /time, /pace",
-		update.Message.Command(),
+		command,
 	))
 }
 
-func (s *Service) handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
+func (s *Service) handleTimeCmd(update *models.Update) *bot.SendMessageParams {
 	arguments, err := extractArguments(update)
 	if err != nil {
 		return buildMsg(update, err.Error())
@@ -329,18 +326,17 @@ func (s *Service) handleTimeCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 		return buildMsg(update, "invalid dist value: "+arguments[1])
 	}
 
-	resultTime := s.calculator.Time(dist, paceDuration)
-	return buildMsg(update, resultTime.String())
+	return buildMsg(update, s.calculator.Time(dist, paceDuration).String())
 }
 
-func (s *Service) handlePaceCmd(update *tgbotapi.Update) tgbotapi.Chattable {
+func (s *Service) handlePaceCmd(update *models.Update) *bot.SendMessageParams {
 	arguments, err := extractArguments(update)
 	if err != nil {
 		return buildMsg(update, err.Error())
 	}
 
 	if len(arguments) != 2 {
-		return buildMsg(update, "should be 2 arguments: (pace, dist) separated by a space")
+		return buildMsg(update, "should be 2 arguments: (dist, time) separated by a space")
 	}
 
 	dist, err := strconv.Atoi(arguments[0])
@@ -353,12 +349,11 @@ func (s *Service) handlePaceCmd(update *tgbotapi.Update) tgbotapi.Chattable {
 		return buildMsg(update, "invalid time value: "+arguments[1])
 	}
 
-	resultPace := s.calculator.Pace(dist, timeDuration)
-	return buildMsg(update, resultPace.String())
+	return buildMsg(update, s.calculator.Pace(dist, timeDuration).String())
 }
 
-func extractArguments(update *tgbotapi.Update) ([]string, error) {
-	arguments := update.Message.CommandArguments()
+func extractArguments(update *models.Update) ([]string, error) {
+	_, arguments := parseCommand(update.Message)
 	if arguments == "" {
 		return nil, errors.New("empty arguments")
 	}
@@ -366,6 +361,9 @@ func extractArguments(update *tgbotapi.Update) ([]string, error) {
 	return strings.Fields(arguments), nil
 }
 
-func buildMsg(update *tgbotapi.Update, text string) tgbotapi.Chattable {
-	return tgbotapi.NewMessage(update.Message.Chat.ID, text)
+func buildMsg(update *models.Update, text string) *bot.SendMessageParams {
+	return &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   text,
+	}
 }

@@ -84,12 +84,12 @@
 
 ### 13) Этап 2. Фундамент
 - [ ] Перевести сборку WASM на TinyGo (`go:wasmexport`, reactor-режим).
-- [ ] Исполнять тот же артефакт на сервере через wazero.
-- [ ] Мигрировать с `go-telegram-bot-api v4` на `go-telegram/bot` (Bot API 10.3).
-- [ ] Заменить `NYTimes/gziphandler` на `klauspost/compress/gzhttp`.
-- [ ] Вынести `/api/v1` из-под флага `DEBUG`.
+- [x] Исполнять тот же артефакт на сервере через wazero.
+- [x] Мигрировать с `go-telegram-bot-api v4` на `go-telegram/bot` (Bot API 10.3).
+- [x] Заменить `NYTimes/gziphandler` на `klauspost/compress/gzhttp`.
+- [x] Вынести `/api/v1` из-под флага `DEBUG`.
 - [ ] Добавить состояние расчёта в URL (shareable-ссылка).
-- [ ] Покрыть тестами `pkg/telegram` (сейчас 0%).
+- [x] Покрыть тестами `pkg/telegram` (сейчас 0%).
 
 ### 14) Этап 3. Продукт
 - [ ] Telegram Mini App с авторизацией через `initData`.
@@ -138,3 +138,7 @@
 - 2026-09-10: Этап 1 — убраны Bootstrap 4, jQuery и ion-rangeslider; слайдер на нативном `input[type=range]`, вёрстка на flex/CSS. Страница больше не обращается к внешним CDN.
 - 2026-09-10: Этап 1 — исправлены 4 дефекта: аргумент в ошибке `handleTimeCmd`, недостижимая ветка `field is required`, `%60` на часах в WASM (вынесено в `calculator.Split`), ответ на неизвестные команды.
 - 2026-09-10: Этап 1 — добавлены тесты `pkg/telegram` (было 0%), тесты `Split` и HTTP-валидации; в CI добавлены `go test -race` и golangci-lint; добавлены LICENSE (MIT) и Dependabot.
+- 2026-09-10: Этап 2 — `NYTimes/gziphandler` заменён на `klauspost/compress/gzhttp` под характеризующими тестами.
+- 2026-09-10: Этап 2 — `/time` и `/pace` стали `/api/v1/time` и `/api/v1/pace`, работают в обоих режимах и отвечают JSON.
+- 2026-09-10: Этап 2 — `cmd/calcwasm` + `pkg/wasmcalc`: тот же `pkg/calculator` исполняется на сервере через wazero (`CALC_ENGINE=wasm`), эквивалентность нативному движку покрыта тестом.
+- 2026-09-10: Этап 2 — миграция с `go-telegram-bot-api v4` на `go-telegram/bot` v1.25 (Bot API 10.3); покрытие `pkg/telegram` 0% -> 65.9%, появился сквозной тест отправки через httptest.
