@@ -8,6 +8,21 @@
     <meta name="theme-color" content="#171C1A" media="(prefers-color-scheme: dark)">
     <title>Pacer</title>
 
+    <script>
+        // Параметры запуска Mini App Telegram кладёт в хэш URL. Официальный SDK
+        // подключается только внутри Telegram — в обычном браузере страница не
+        // делает ни одного внешнего запроса.
+        const telegramLaunch = new URLSearchParams(location.hash.slice(1));
+        const telegramSDK = telegramLaunch.has("tgWebAppData")
+            ? new Promise((resolve) => {
+                const script = document.createElement("script");
+                script.src = "https://telegram.org/js/telegram-web-app.js";
+                script.onload = () => resolve(window.Telegram && window.Telegram.WebApp);
+                script.onerror = () => resolve(null);
+                document.head.appendChild(script);
+            })
+            : Promise.resolve(null);
+    </script>
     <script src="wasm_exec.js"></script>
 
     <style>
@@ -778,7 +793,7 @@
                 pad2(Number(byId("timeSecondInput").value || 0))
             ].join(":"));
 
-            history.replaceState(null, "", location.pathname + "?" + params.toString());
+            history.replaceState(null, "", location.pathname + "?" + params.toString() + location.hash);
         }
 
         function applyStateFromURL() {
@@ -797,12 +812,18 @@
             }
         }
 
+        // Ссылка для шаринга — без хэша. Внутри Telegram в хэше лежит подписанный
+        // initData пользователя: его имя и id, по которым сутки отвечает /api/v1/me.
+        function shareURL() {
+            return location.origin + location.pathname + location.search;
+        }
+
         function attachShareButton() {
             const note = byId("shareNote");
 
             byId("shareButton").addEventListener("click", async function () {
                 try {
-                    await navigator.clipboard.writeText(location.href);
+                    await navigator.clipboard.writeText(shareURL());
                     note.textContent = "Ссылка скопирована.";
                 } catch (error) {
                     note.textContent = "Не получилось скопировать — возьмите ссылку из адресной строки.";
@@ -1215,6 +1236,79 @@
             input.addEventListener("pointercancel", stopDrag);
         }
 
+        // Нейтральные цвета берём у Telegram, чтобы приложение не выглядело
+        // вставкой в мессенджер; жёлтая разметка остаётся своей.
+        const telegramTheme = {
+            bg_color: "--paper",
+            secondary_bg_color: "--surface",
+            text_color: "--ink",
+            hint_color: "--ink-soft",
+            section_separator_color: "--line",
+            destructive_text_color: "--signal"
+        };
+
+        function applyTelegramTheme(theme) {
+            if (!theme) {
+                return;
+            }
+
+            const style = document.documentElement.style;
+            Object.entries(telegramTheme).forEach(([key, token]) => {
+                if (theme[key]) {
+                    style.setProperty(token, theme[key]);
+                }
+            });
+            if (theme.text_color) {
+                style.setProperty("--focus", theme.text_color);
+            }
+        }
+
+        function themeFromLaunch() {
+            try {
+                return JSON.parse(telegramLaunch.get("tgWebAppThemeParams") || "null");
+            } catch (error) {
+                return null;
+            }
+        }
+
+        async function greetTelegramUser(initData) {
+            try {
+                const response = await fetch("/api/v1/me", {headers: {Authorization: "tma " + initData}});
+                if (!response.ok) {
+                    return;
+                }
+
+                const {user} = await response.json();
+                if (user && user.first_name) {
+                    byId("lede").textContent = `${user.first_name}, задайте дистанцию и время или темп — второе посчитается само.`;
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        async function startTelegram() {
+            if (!telegramLaunch.has("tgWebAppData")) {
+                return;
+            }
+
+            // Тема и данные для входа лежат в хэше и доступны сразу. Ни то, ни
+            // другое не ждёт SDK: telegram.org может грузиться медленно или не
+            // грузиться вовсе, и вход от этого страдать не должен.
+            applyTelegramTheme(themeFromLaunch());
+            greetTelegramUser(telegramLaunch.get("tgWebAppData"));
+
+            const webApp = await telegramSDK;
+            if (!webApp) {
+                return;
+            }
+
+            webApp.ready();
+            webApp.expand();
+            applyTelegramTheme(webApp.themeParams);
+            webApp.onEvent("themeChanged", () => applyTelegramTheme(webApp.themeParams));
+        }
+
         function loadWASM() {
             if (!WebAssembly.instantiateStreaming) {
                 WebAssembly.instantiateStreaming = async (resp, importObject) => {
@@ -1271,6 +1365,7 @@
             updatePresetHighlight(initialDistance);
 
             loadWASM();
+            startTelegram();
         });
     </script>
 </head>
@@ -1278,7 +1373,7 @@
 <main class="shell">
     <header class="masthead">
         <h1>Pacer</h1>
-        <p>Задайте дистанцию и время или темп — второе посчитается само.</p>
+        <p id="lede">Задайте дистанцию и время или темп — второе посчитается само.</p>
     </header>
 
     <section class="distance" aria-labelledby="distance-title">
