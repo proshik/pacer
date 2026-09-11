@@ -1,7 +1,6 @@
 package telegram
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -288,77 +287,69 @@ func buildWebhookURL(host, token string) (string, error) {
 }
 
 func handleStartCmd(update *models.Update) *bot.SendMessageParams {
-	buf := bytes.NewBufferString("Calculate Your Running Pace\n")
-
-	buf.WriteString("Please, enter one of the following commands:\n\n")
-	buf.WriteString("/time - calculate time, e.g. /time 4m50s 21095, where first - pace, second - distance\n")
-	buf.WriteString("/pace - calculate pace, e.g. /pace 21097 1h38m48s, where first - distance, second - time\n")
-
-	return buildMsg(update, buf.String())
+	return buildMsg(update, textsFor(update.Message).greeting)
 }
 
 func handleUnknownCmd(update *models.Update) *bot.SendMessageParams {
 	command, _ := parseCommand(update.Message)
 
-	return buildMsg(update, fmt.Sprintf(
-		"Unknown command: /%s\n\nAvailable commands: /start, /time, /pace",
-		command,
-	))
+	return buildMsg(update, fmt.Sprintf(textsFor(update.Message).unknownCommand, command))
 }
 
 func (s *Service) handleTimeCmd(update *models.Update) *bot.SendMessageParams {
-	arguments, err := extractArguments(update)
-	if err != nil {
-		return buildMsg(update, err.Error())
+	t := textsFor(update.Message)
+
+	arguments := extractArguments(update)
+	if len(arguments) == 0 {
+		return buildMsg(update, t.emptyArguments)
 	}
 
 	if len(arguments) != 2 {
-		return buildMsg(update, "should be 2 arguments: (pace, dist) separated by a space")
+		return buildMsg(update, t.timeArgCount)
 	}
 
 	paceDuration, err := time.ParseDuration(arguments[0])
 	if err != nil {
-		return buildMsg(update, "invalid pace value: "+arguments[0])
+		return buildMsg(update, t.invalidPace+arguments[0])
 	}
 
 	dist, err := strconv.Atoi(arguments[1])
 	if err != nil {
-		return buildMsg(update, "invalid dist value: "+arguments[1])
+		return buildMsg(update, t.invalidDist+arguments[1])
 	}
 
 	return buildMsg(update, s.calculator.Time(dist, paceDuration).String())
 }
 
 func (s *Service) handlePaceCmd(update *models.Update) *bot.SendMessageParams {
-	arguments, err := extractArguments(update)
-	if err != nil {
-		return buildMsg(update, err.Error())
+	t := textsFor(update.Message)
+
+	arguments := extractArguments(update)
+	if len(arguments) == 0 {
+		return buildMsg(update, t.emptyArguments)
 	}
 
 	if len(arguments) != 2 {
-		return buildMsg(update, "should be 2 arguments: (dist, time) separated by a space")
+		return buildMsg(update, t.paceArgCount)
 	}
 
 	dist, err := strconv.Atoi(arguments[0])
 	if err != nil {
-		return buildMsg(update, "invalid dist value: "+arguments[0])
+		return buildMsg(update, t.invalidDist+arguments[0])
 	}
 
 	timeDuration, err := time.ParseDuration(arguments[1])
 	if err != nil {
-		return buildMsg(update, "invalid time value: "+arguments[1])
+		return buildMsg(update, t.invalidTime+arguments[1])
 	}
 
 	return buildMsg(update, s.calculator.Pace(dist, timeDuration).String())
 }
 
-func extractArguments(update *models.Update) ([]string, error) {
+func extractArguments(update *models.Update) []string {
 	_, arguments := parseCommand(update.Message)
-	if arguments == "" {
-		return nil, errors.New("empty arguments")
-	}
 
-	return strings.Fields(arguments), nil
+	return strings.Fields(arguments)
 }
 
 func buildMsg(update *models.Update, text string) *bot.SendMessageParams {

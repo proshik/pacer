@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -207,6 +208,61 @@ func TestCommandsRejectWrongArgumentCount(t *testing.T) {
 
 		if !strings.Contains(got, "2 arguments") {
 			t.Errorf("%q: expected a complaint about argument count, got %q", text, got)
+		}
+	}
+}
+
+func withLanguage(update *models.Update, languageCode string) *models.Update {
+	update.Message.From = &models.User{ID: 7, LanguageCode: languageCode}
+	return update
+}
+
+func hasCyrillic(text string) bool {
+	return strings.ContainsFunc(text, func(r rune) bool { return unicode.Is(unicode.Cyrillic, r) })
+}
+
+// Every reply that carries words follows the user's Telegram language: Russian
+// for "ru", English for anything else, including a message with no sender.
+func TestRepliesFollowUserLanguage(t *testing.T) {
+	commands := []string{
+		"/start",
+		"/frobnicate",
+		"/time",
+		"/time 5m0s",
+		"/time notapace 21095",
+		"/time 5m0s far",
+		"/pace 10000",
+		"/pace far 50m0s",
+		"/pace 10000 nottime",
+	}
+
+	languages := []struct {
+		code        string
+		wantRussian bool
+	}{
+		{code: "ru", wantRussian: true},
+		{code: "ru-RU", wantRussian: true},
+		{code: "en", wantRussian: false},
+		{code: "uk", wantRussian: false},
+		{code: "", wantRussian: false},
+	}
+
+	for _, language := range languages {
+		for _, text := range commands {
+			t.Run(language.code+" "+text, func(t *testing.T) {
+				s := newTestService(t)
+
+				update := newCommandUpdate(text)
+				if language.code != "" {
+					update = withLanguage(update, language.code)
+				}
+				s.handleUpdate(update)
+
+				got := messageText(t, receiveMessage(t, s))
+				if hasCyrillic(got) != language.wantRussian {
+					t.Errorf("reply to %q for language %q = %q, want Russian: %v", text, language.code, got, language.wantRussian)
+				}
+			})
 		}
 	}
 }
