@@ -35,6 +35,7 @@ type errorResponse struct {
 func NewHandler(
 	debugMode bool,
 	tgToken string,
+	host string,
 	t *telegram.Service,
 	c calculator.Engine,
 	store *history.Store,
@@ -67,6 +68,11 @@ func NewHandler(
 
 	assetsDir := gzhttp.GzipHandler(http.FileServer(http.FS(stripped)))
 	serveMux.Handle("/", assetsDir)
+
+	// The page itself goes out with a link preview built from the shared link.
+	if page, err := fs.ReadFile(stripped, "index.html"); err == nil {
+		serveMux.Handle("GET /{$}", gzhttp.GzipHandler(pageHandler(page, siteURL(host), c)))
+	}
 
 	return serveMux, nil
 }

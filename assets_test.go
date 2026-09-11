@@ -12,6 +12,24 @@ import (
 	"gorun/pkg/http/rest"
 )
 
+// The real page carries the preview markers, so a shared link reaches a
+// messenger with its plan in og:title. Without them the server would quietly
+// serve the static tags and every preview would read "Pacer".
+func TestSharedLinkPreviewShowsThePlan(t *testing.T) {
+	handler, err := rest.NewHandler(true, "", "pacer.example.com", nil, calculator.NewService(), nil, assets)
+	if err != nil {
+		t.Fatalf("build handler: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/?d=42195&t=3:44:20&l=ru", nil))
+
+	want := `<meta property="og:title" content="Марафон за 3:44:20 — это 5:19 на километр">`
+	if !strings.Contains(recorder.Body.String(), want) {
+		t.Errorf("shared link page lacks %s", want)
+	}
+}
+
 // localLink matches href and src values that point at a file next to the page:
 // no scheme, no protocol-relative host, no fragment-only link.
 var localLink = regexp.MustCompile(`(?:href|src)="([^"#:/][^"#:]*)"`)
@@ -21,7 +39,7 @@ var localLink = regexp.MustCompile(`(?:href|src)="([^"#:/][^"#:]*)"`)
 // accepts. Types are checked on the real handler over the real embedded files:
 // the Alpine image has no mime.types, only Go's built-in table.
 func TestEmbeddedPageAssetsAreServed(t *testing.T) {
-	handler, err := rest.NewHandler(true, "", nil, calculator.NewService(), nil, assets)
+	handler, err := rest.NewHandler(true, "", "pacer.example.com", nil, calculator.NewService(), nil, assets)
 	if err != nil {
 		t.Fatalf("build handler: %v", err)
 	}

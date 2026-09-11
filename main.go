@@ -93,7 +93,7 @@ func main() {
 	}
 	slog.Info("saved runs history", "enabled", store != nil)
 
-	handler, err := rest.NewHandler(debug, tgToken, t, c, store, assets)
+	handler, err := rest.NewHandler(debug, tgToken, host, t, c, store, assets)
 	if err != nil {
 		slog.Error("http handler init failed", "err", err)
 		os.Exit(1)

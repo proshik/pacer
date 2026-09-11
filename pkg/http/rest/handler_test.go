@@ -38,7 +38,7 @@ func newTestHandlerWith(t *testing.T, debugMode bool, store *history.Store) *htt
 		"assets/index.html": &fstest.MapFile{Data: page},
 	}
 
-	handler, err := NewHandler(debugMode, "token", nil, calculator.NewService(), store, assets)
+	handler, err := NewHandler(debugMode, "token", "pacer.example.com", nil, calculator.NewService(), store, assets)
 	if err != nil {
 		t.Fatalf("create test handler: %v", err)
 	}

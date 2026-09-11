@@ -12,13 +12,16 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
-    <!-- Превью ссылки в мессенджерах. -->
+    <!-- Превью ссылки в мессенджерах. Сервер заменяет весь блок между маркерами
+         на теги с планом из ссылки и абсолютными адресами (pkg/http/rest/preview.go). -->
+    <!-- og:start -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Pacer">
     <meta property="og:title" content="Pacer">
     <meta property="og:description" content="Беговой калькулятор: время и темп на любой дистанции, раскладка по километрам, прогноз результата и VDOT.">
     <meta property="og:image" content="icon-512.png">
     <meta name="twitter:card" content="summary">
+    <!-- og:end -->
 
     <script>
         // Параметры запуска Mini App Telegram кладёт в хэш URL. Официальный SDK
@@ -1234,8 +1237,13 @@
 
         // Ссылка для шаринга — без хэша. Внутри Telegram в хэше лежит подписанный
         // initData пользователя: его имя и id, по которым сутки отвечает /api/v1/me.
+        // l — язык того, кто делится: на нём сервер пишет превью ссылки в чате.
+        // Страница получателя l не читает и открывается на его собственном языке.
         function shareURL() {
-            return location.origin + location.pathname + location.search;
+            const params = new URLSearchParams(location.search);
+            params.set("l", language);
+
+            return location.origin + location.pathname + "?" + params.toString();
         }
 
         function attachShareButton() {

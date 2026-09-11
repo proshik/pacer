@@ -5,7 +5,7 @@
 - `pkg/` contains the modules:
   - `pkg/calculator/` — pure formulas with no I/O: pace and time, even splits, Riegel and Cameron predictions, Daniels VDOT and training paces.
   - `pkg/analysis/` — response shapes for splits, predictions and VDOT, shared by the HTTP API and the browser wasm so both return identical JSON.
-  - `pkg/http/rest/` — HTTP API (`/api/v1/...`), health check, Telegram webhook and the static page.
+  - `pkg/http/rest/` — HTTP API (`/api/v1/...`), health check, Telegram webhook, the static files and the page itself, whose link preview tags carry the plan from a shared link (`preview.go`).
   - `pkg/telegram/` — bot commands on `github.com/go-telegram/bot`, with bounded queues and worker goroutines.
   - `pkg/miniapp/` — validation of Telegram Mini App init data.
   - `pkg/history/` — saved runs in SQLite (`modernc.org/sqlite`, no cgo).
@@ -56,6 +56,7 @@
 - Required runtime env vars: `PORT`, `TELEGRAM_TOKEN`, `HOST`; optional: `DEBUG`, `LOG_LEVEL`, `CALC_ENGINE`, `DB_PATH`.
 - Mini App requests authenticate with `Authorization: tma <initData>`; the server validates the signature with the bot token and accepts data for 24 hours.
 - Never put the URL hash into a share link: inside Telegram it holds the user's signed init data.
+- Build link preview tags from parsed numbers only; never copy a query value into the page markup.
 - Never commit real secrets or tokens. Use local shell exports or deployment secret management.
 
 ## Agent Workflow Notes
