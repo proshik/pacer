@@ -1,24 +1,41 @@
-# gorun
+# Pacer
 
-Калькулятор бегового темпа/времени с:
-- backend на Go (`main.go`);
-- web-интерфейсом из `assets/`;
-- WASM-модулем (`assets/json.wasm`), который собирается отдельно из `cmd/wasm`.
+Беговой калькулятор: задайте дистанцию и время или темп — второе посчитается само. Работает
+как веб-страница, как Telegram-бот и как Mini App внутри Telegram.
 
-## Почему запуск устроен по-разному
+Что умеет страница:
+- время ↔ темп на дистанции до 200 км, с пресетами от 1 км до 100 миль;
+- план забега словами в шапке: «Марафон за 3:44:20 — это 5:19 на километр»;
+- раскладка по километрам (на длинных дистанциях — по 5 км);
+- прогноз на 1, 3, 5, 10 км, полумарафон и марафон по формулам Ригеля и Кэмерона;
+- VDOT по Дэниелсу и тренировочные темпы: лёгкий, марафонский, пороговый, интервальный;
+- ссылка на расчёт — открывает тот же расчёт у другого человека;
+- в Mini App — вход через Telegram и сохранённые расчёты.
 
-В проекте есть два разных executable:
+Расчёты на странице идут в браузере, в WebAssembly. Вне Telegram страница не делает ни одного
+внешнего запроса. Есть тёмная тема и управление с клавиатуры: Tab переходит между цифрами, ↑↓
+меняют значение.
 
-1. `main.go` (корень проекта)  
-   Это основной сервер: HTTP-роуты, Telegram-интеграция, раздача `assets`.
+## Как устроен проект
 
-2. `cmd/wasm/main.go`  
-   Это код для браузера (WASM), собирается только с `GOOS=js GOARCH=wasm`.
+Один Go-модуль, три цели сборки поверх общего ядра `pkg/calculator`:
 
-Поэтому:
-- локально для запуска сервера достаточно `go run .`;
-- для обновления фронтенд-логики в WASM нужно отдельно выполнить `./build.sh`;
-- в production обычно заранее собирают/коммитят `assets/json.wasm` и `assets/wasm_exec.js`, а сервер просто отдает эти файлы.
+1. **Сервер** (`main.go`) — HTTP API, Telegram-бот и страница из `assets/`, встроенная в бинарь
+   через `go:embed`.
+2. **Браузерный WASM** (`cmd/wasm`) — собирается TinyGo в `assets/json.wasm`; страница вызывает
+   из него все расчёты.
+3. **Серверный WASM** (`cmd/calcwasm`) — WASI-reactor в `pkg/wasmcalc/calc.wasm`. Сервер умеет
+   исполнять формулы из него через wazero (`CALC_ENGINE=wasm`).
+
+| Пакет | Что внутри |
+|---|---|
+| `pkg/calculator` | формулы без I/O: время, темп, сплиты, прогноз Ригеля и Кэмерона, VDOT и зоны |
+| `pkg/analysis` | ответы для раскладки, прогноза и VDOT — общие для API и браузерного WASM |
+| `pkg/http/rest` | HTTP API, проверка здоровья, вебхук Telegram, раздача страницы |
+| `pkg/telegram` | бот на `go-telegram/bot`: команды `/start`, `/time`, `/pace` |
+| `pkg/miniapp` | проверка подписи данных запуска Mini App (`initData`) |
+| `pkg/history` | сохранённые расчёты в SQLite (`modernc.org/sqlite`, без cgo) |
+| `pkg/wasmcalc` | исполнение `calc.wasm` на сервере через wazero |
 
 ## Требования
 
@@ -35,8 +52,10 @@
 - `HOST`
 
 Опциональные:
-- `DEBUG` (`true/false`, по умолчанию `false`)
-- `LOG_LEVEL` (`debug|info|warn|error`; если не задан, уровень берется из `DEBUG`)
+- `DEBUG` (`true/false`, по умолчанию `false`) — режим работы, а не только уровень логов: при
+  `true` бот получает сообщения long polling и удаляет вебхук, при `false` регистрирует вебхук
+  `HOST/<токен>` (нужен HTTPS)
+- `LOG_LEVEL` (`debug|info|warn|error`; если не задан, уровень берётся из `DEBUG`)
 - `CALC_ENGINE` (`native` по умолчанию, либо `wasm`) — чем считать темп и время
 - `DB_PATH` — файл SQLite для расчётов, сохранённых в Mini App. Без него история отключена:
   `/api/v1/runs` отвечает `503`, остальное работает. В Docker по умолчанию `/data/pacer.db`
@@ -49,7 +68,13 @@
 
 Это значит, что значения из окружения имеют приоритет над `.env`.
 
-## Локальный запуск в IDE (рекомендуемый)
+## Локальный запуск
+
+Сервер при старте сразу обращается к Telegram, поэтому ему нужен настоящий токен бота. С
+`DEBUG=true` он удаляет у бота вебхук — для локальной работы заведите отдельного тестового бота,
+иначе боевой бот перестанет получать сообщения.
+
+### В IDE (рекомендуемый)
 
 1. Создайте `.env` в корне проекта:
 
@@ -60,19 +85,50 @@ cp .env.example .env
 2. Заполните `.env` реальными значениями (`TELEGRAM_TOKEN` и т.д.).
 3. Запускайте `main.go`/`go run .` из IDE без ручного добавления env в Run Configuration.
 
-## Локальный запуск из терминала
+### Из терминала
 
-Вариант 1: через `.env` (как выше), просто:
+Через `.env` (как выше):
 
 ```bash
 go run .
 ```
 
-Вариант 2: явно через переменные:
+Или явно через переменные:
 
 ```bash
 PORT=8080 TELEGRAM_TOKEN=token HOST=http://localhost:8080 DEBUG=true go run .
 ```
+
+### Только страница, без бота
+
+Калькулятор целиком работает в браузере, поэтому для работы над страницей сервер не нужен:
+
+```bash
+python3 -m http.server 8080 -d assets
+```
+
+Без сервера не будет только того, что живёт в Telegram: входа и сохранённых расчётов.
+
+## Бот
+
+- `/start` — подсказка по командам.
+- `/time 4m50s 21095` — время по темпу и дистанции в метрах.
+- `/pace 21097 1h38m48s` — темп по дистанции в метрах и времени.
+
+Длительности пишутся в формате Go: `4m50s`, `1h38m48s`.
+
+## Mini App
+
+Чтобы открыть страницу внутри Telegram:
+
+1. Разверните сервис на HTTPS-адресе и укажите его в `HOST`, `DEBUG=false`.
+2. В @BotFather включите для бота Mini App и укажите тот же HTTPS-адрес.
+3. Для сохранённых расчётов задайте `DB_PATH` (в Docker-образе уже задан).
+
+Запуск внутри Telegram страница узнаёт по параметрам в адресе. Только тогда она подключает
+официальный `telegram-web-app.js`, берёт цвета темы Telegram, входит по данным запуска и
+показывает сохранённые расчёты. Ссылка «Скопировать ссылку на расчёт» никогда не уносит эти
+данные — в них подпись пользователя.
 
 ## HTTP API
 
@@ -108,6 +164,7 @@ curl "http://localhost:8080/api/v1/vdot?dist=5000&time=19m57s"
 Формулы: Ригель — T₂ = T₁·(D₂/D₁)^1.06; Кэмерон — модель для дистанций от 800 м до марафона;
 VDOT — уравнения Дэниелса–Гилберта. Зоны: E — 59–74% VDOT, T — 88%, I — 98%, M — темп
 эквивалентного марафона. Темп повторов (R) не считается: источники не задают его процентом.
+Константы сверены с первоисточниками, а тесты VDOT — с опубликованной таблицей Дэниелса.
 
 Эти три эндпоинта считают нативно — `CALC_ENGINE=wasm` на них пока не действует.
 
@@ -137,6 +194,9 @@ curl -X DELETE -H "Authorization: tma $INIT_DATA" http://localhost:8080/api/v1/r
 3. Собирает `cmd/calcwasm` в `pkg/wasmcalc/calc.wasm` (`GOOS=wasip1 GOARCH=wasm`,
    `-buildmode=c-shared`) — WASI-reactor для сервера.
 
+Сборка воспроизводима: две сборки подряд дают побайтно одинаковые файлы (reactor собирается с
+`-trimpath -buildvcs=false`, иначе Go вшил бы в него ревизию git).
+
 Запуск:
 
 ```bash
@@ -147,12 +207,12 @@ curl -X DELETE -H "Authorization: tma $INIT_DATA" http://localhost:8080/api/v1/r
 
 ```bash
 tinygo build -target=wasm -no-debug -o assets/json.wasm ./cmd/wasm
-GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o pkg/wasmcalc/calc.wasm ./cmd/calcwasm
+GOOS=wasip1 GOARCH=wasm go build -trimpath -buildvcs=false -buildmode=c-shared \
+  -o pkg/wasmcalc/calc.wasm ./cmd/calcwasm
 ```
 
-Примечание: у обоих wasm-пакетов есть build-tags, поэтому обычный `go run ./cmd/wasm` не
-запускает WASM-версию. Для удобства в не-WASM окружении рядом лежит fallback `main_nowasm.go`
-с подсказкой.
+У обоих wasm-пакетов есть build-tags, поэтому обычный `go run ./cmd/wasm` не запускает
+WASM-версию. Для удобства в не-WASM окружении рядом лежит fallback `main_nowasm.go` с подсказкой.
 
 ## Один артефакт в двух хостах
 
@@ -169,35 +229,47 @@ GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o pkg/wasmcalc/calc.wasm .
 
 ## Рекомендуемый цикл разработки
 
-1. Изменили backend (`main.go`, `pkg/...`) -> `go run .`
-2. Изменили WASM-логику (`cmd/wasm/...`, `cmd/calcwasm/...`, `pkg/calculator/...`) ->
-   `./build.sh`, затем перезапуск сервера/обновление страницы.
-3. Перед коммитом:
+1. Изменили backend (`main.go`, `pkg/...`) → `go run .`
+2. Изменили WASM-логику (`cmd/wasm/...`, `cmd/calcwasm/...`, `pkg/calculator/...`,
+   `pkg/analysis/...`) → `./build.sh`, затем перезапуск сервера или обновление страницы.
+3. Изменили страницу → проверьте её на ширине 390 px и в обеих темах.
+4. Перед коммитом:
 
 ```bash
 go test -race ./ ./pkg/...
 go vet ./ ./pkg/...
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...
-go build ./ ./pkg/...
+go build ./...
 ./build.sh
 ```
+
+## CI
+
+Workflow `.github/workflows/ci.yml` запускается на каждый PR и на пуш в `master`/`main`:
+- `go test -race`, `go vet`, golangci-lint v2.13;
+- `./build.sh` с TinyGo 0.42 (`acifani/setup-tinygo`);
+- сборка сервера;
+- сборка Docker-образа (кроме PR); на тегах `v*` образ публикуется в Docker Hub.
+
+Dependabot раз в неделю предлагает обновления Go-модулей, GitHub Actions и базовых образов.
 
 ## Production / Docker
 
 `Dockerfile` многоступенчатый: браузерный бандл собирается в стадии `tinygo/tinygo:0.42.0`,
-серверный reactor — обычным Go, затем backend binary (`/pacer`), который их встраивает.
+серверный reactor — обычным Go, затем backend binary (`/pacer`), который их встраивает. История
+расчётов лежит в томе `/data`.
 
 Сборка и запуск контейнера:
 
 ```bash
-docker build -t gorun .
+docker build -t pacer .
 docker run --rm -p 8080:80 \
   -e PORT=80 \
   -e TELEGRAM_TOKEN=token \
   -e HOST=http://localhost:8080 \
   -e DEBUG=true \
   -v pacer-data:/data \
-  gorun
+  pacer
 ```
 
 ## Типичные проблемы
@@ -208,5 +280,14 @@ docker run --rm -p 8080:80 \
 2. `TELEGRAM_TOKEN must be set` / `HOST must be set`  
    Аналогично, проверьте `.env` и Run Configuration.
 
-3. IDE подсвечивает `syscall/js`  
+3. `tinygo not found` при `./build.sh`  
+   Установите TinyGo (см. «Требования») или соберите обычным Go: `WASM_COMPILER=go ./build.sh`.
+   TinyGo 0.42 работает с Go от 1.23 до 1.27; после обновления Go может понадобиться обновить и
+   TinyGo.
+
+4. IDE подсвечивает `syscall/js`  
    Это нормально для не-WASM таргета. Файл `cmd/wasm/main.go` ограничен build-tags `js && wasm`.
+
+## Лицензия
+
+MIT — см. [LICENSE](LICENSE).
