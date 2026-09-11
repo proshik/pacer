@@ -7,6 +7,18 @@
     <meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#171C1A" media="(prefers-color-scheme: dark)">
     <title>Pacer</title>
+    <meta name="apple-mobile-web-app-title" content="Pacer">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <!-- Превью ссылки в мессенджерах. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Pacer">
+    <meta property="og:title" content="Pacer">
+    <meta property="og:description" content="Беговой калькулятор: время и темп на любой дистанции, раскладка по километрам, прогноз результата и VDOT.">
+    <meta property="og:image" content="icon-512.png">
+    <meta name="twitter:card" content="summary">
 
     <script>
         // Параметры запуска Mini App Telegram кладёт в хэш URL. Официальный SDK
@@ -1896,6 +1908,20 @@
             webApp.onEvent("themeChanged", () => applyTelegramTheme(webApp.themeParams));
         }
 
+        // Офлайн нужен на старте забега, где связь часто пропадает. Service worker
+        // есть только на https и localhost; без него страница работает как раньше.
+        function registerServiceWorker() {
+            if (!("serviceWorker" in navigator)) {
+                return;
+            }
+
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("sw.js").catch((error) => {
+                    console.warn("service worker registration failed", error);
+                });
+            });
+        }
+
         function loadWASM() {
             if (!WebAssembly.instantiateStreaming) {
                 WebAssembly.instantiateStreaming = async (resp, importObject) => {
@@ -2007,6 +2033,7 @@
 
             loadWASM();
             startTelegram();
+            registerServiceWorker();
         });
     </script>
 </head>

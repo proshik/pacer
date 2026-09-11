@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <!-- Асфальт, края дороги и осевая разметка, уходящая к горизонту. -->
+    <rect width="512" height="512" rx="112" fill="#1E2522"/>
+    <path d="M48 512 L232 64 M464 512 L280 64" stroke="#F3F4F1" stroke-opacity="0.3" stroke-width="12" fill="none"/>
+    <path d="M227.5 440 L284.5 440 L278.2 345 L233.8 345 Z" fill="#FFD21F"/>
+    <path d="M236.6 300 L275.4 300 L271.4 240 L240.6 240 Z" fill="#FFD21F"/>
+    <path d="M242.9 205 L269.1 205 L267.2 175 L244.8 175 Z" fill="#FFD21F"/>
+</svg>

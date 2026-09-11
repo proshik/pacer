@@ -12,7 +12,7 @@
   - `pkg/wasmcalc/` — runs `calc.wasm` on the server through wazero when `CALC_ENGINE=wasm`.
 - `cmd/wasm/` — browser bundle (`js && wasm`), built with TinyGo into `assets/json.wasm`.
 - `cmd/calcwasm/` — server WASI reactor (`wasip1`, `go:wasmexport`), built into `pkg/wasmcalc/calc.wasm`.
-- `assets/` — the page (`index.html`), `json.wasm` and the `wasm_exec.js` of the toolchain that built it.
+- `assets/` — the page (`index.html`), `json.wasm` and the `wasm_exec.js` of the toolchain that built it, the web app manifest, the service worker (`sw.js`) and the icons, whose PNGs are rendered from `icon.svg`.
 - Keep new domain logic under `pkg/<feature>/`.
 
 ## Build, Test, and Development Commands
@@ -38,7 +38,9 @@
 - Write the failing test first, then the code.
 - Check formulas against published reference values, not against the implementation itself: the VDOT tests use Daniels' table, the Mini App tests use Telegram's published init data example.
 - Test HTTP handlers through `httptest`. The Telegram client can be tested without a token via `bot.WithSkipGetMe()` and `bot.WithServerURL()`; note that it sends `multipart/form-data`, not JSON.
-- For page changes, check a browser at 390 px width, in both colour schemes and in both languages. The browser wasm exports can be called under Node through `assets/wasm_exec.js`.
+- For page changes, check a browser at 390 px width, in both colour schemes and in both languages.
+- `assets_test.go` serves every file `index.html` links through the real handler and checks its `Content-Type`; list a newly linked file there. A file the page needs offline also goes into `SHELL` in `assets/sw.js`.
+- CI does not run on branch pushes, so build the image locally with `docker build .` before a pull request. The browser wasm exports can be called under Node through `assets/wasm_exec.js`.
 - Run tests, lint and `./build.sh` before opening a pull request.
 
 ## Commit & Pull Request Guidelines
