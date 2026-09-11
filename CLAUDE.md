@@ -44,8 +44,8 @@ TinyGo 0.42 стоит из tap'а `tinygo-org/tools`: доверена толь
 (`brew trust --formula tinygo-org/tools/tinygo`). TinyGo собирается поверх установленного Go и
 поддерживает Go 1.23–1.27; после обновления Go до 1.28 его может понадобиться обновить.
 
-`node` в интерактивном шелле сломан зацикленным ленивым загрузчиком nvm (`_load_nvm`). Звать
-бинарь по абсолютному пути: `~/.nvm/versions/node/v22.17.0/bin/node`.
+`node` стоит из Homebrew: `/opt/homebrew/bin/node` (v26). Каталога `~/.nvm/versions` на машине
+больше нет.
 
 Локальный Go — 1.27.x, а бинарь `golangci-lint` из brew может быть собран более старым Go и
 падать с `export data version ... is greater than maximum supported version`. Обход — запускать
@@ -219,6 +219,34 @@ locked». Все маршруты `/api/v1/runs` требуют `Authorization: 
 чужой план. Перед тире стоит неразрывный пробел, чтобы тире не начинало строку. Приветствие Mini
 App по-прежнему пишет в `#lede`.
 
+### Языки
+
+Страница и бот работают на русском и английском. Все строки страницы лежат в словаре `messages` в
+`assets/index.html`: у `messages.ru` и `messages.en` одинаковые ключи, строки с подстановками —
+функции, `t(key, ...args)` берёт строку текущего языка. Статичная разметка остаётся русской (это
+вид без JS), а текст с `data-i18n` и `aria-label` с `data-i18n-label` переводит `applyLanguage()`.
+Динамический текст ставится через `setText(element, key)`: ключ остаётся в `data-i18n`, поэтому
+смена языка переводит и уже показанную ошибку или статус. Шапка, раскладка, прогноз, приветствие
+и сохранённые расчёты перерисовываются из запомненного состояния (`shownPlan`, `shownAnalysis`,
+`greetingName`, `savedRuns`), а не из полей — в полях в этот момент может быть ошибка. Новая
+строка — это ключ в обоих словарях; расхождение ловит сравнение `Object.keys(messages.ru)` и
+`Object.keys(messages.en)`.
+
+Порядок выбора языка: ручной выбор из `localStorage` (`pacer.lang`), затем `language_code`
+пользователя из `tgWebAppData` в хэше (SDK не ждём), затем `navigator.languages`, иначе
+английский. Кнопка `#langSwitch` в шапке предлагает другой язык и называет его на нём самом
+(«English» или «Русский», с атрибутом `lang`); `setInputsDisabled` её не трогает, она работает и
+до загрузки WASM. Числа и даты форматируются через `locales[language]`: `21,097 км` и
+`21.097 km`.
+
+Тексты ошибок из WASM технические и английские: страница показывает свою фразу, а исходный текст
+пишет в консоль. Неразрывные пробелы в словаре записываются как `\u00a0`: буквальный символ в
+коде не отличить от обычного пробела.
+
+Бот выбирает язык по `message.From.LanguageCode` (`textsFor` в `pkg/telegram/messages.go`):
+`ru` и `ru-*` получают русский, все остальные и сообщения без отправителя — английский. Сам
+результат (`50m0s`) не переводится.
+
 ### Проверка страницы без браузерного расширения
 
 `--virtual-time-budget` у headless Chrome зависает на этой странице (асинхронная компиляция
@@ -227,7 +255,8 @@ Node + DevTools Protocol: запустить Chrome с `--headless=new --remote-
 --use-mock-keychain --password-store=basic --user-data-dir=<временный каталог>`, подключиться
 встроенным в Node 22 `WebSocket`, дождаться `document.body.dataset.state === "ready"`, дальше
 `Runtime.evaluate`, `Emulation.setDeviceMetricsOverride` (390 px, `mobile: true`),
-`Emulation.setEmulatedMedia` (`prefers-color-scheme`) и `Page.captureScreenshot`. Горизонтальный
+`Emulation.setEmulatedMedia` (`prefers-color-scheme`) и `Page.captureScreenshot`. Язык браузера
+задаёт `Emulation.setUserAgentOverride` с `acceptLanguage` — он меняет `navigator.languages`. Горизонтальный
 скролл ловится проверкой `scrollWidth > clientWidth`.
 
 Настоящий сервер без реального токена бота не запустить: `bot.New` сразу ходит в Telegram.

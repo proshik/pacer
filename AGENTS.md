@@ -30,6 +30,7 @@
 - Keep packages small and cohesive; prefer constructor-style initialization (for example `NewService()`).
 - Library packages under `pkg/` return errors; only `main` exits. Log with `log/slog` key-value attributes.
 - Use tabs/formatting produced by `gofmt`; do not hand-align spacing.
+- Page text lives in the `messages` dictionary in `assets/index.html`: add every new string to both `ru` and `en` under the same key, and mark static markup with `data-i18n` (text) or `data-i18n-label` (`aria-label`). Bot replies live in `pkg/telegram/messages.go`.
 
 ## Testing Guidelines
 - Use Go's `testing` package with table-driven tests (see `pkg/calculator/timing_test.go`).
@@ -37,7 +38,7 @@
 - Write the failing test first, then the code.
 - Check formulas against published reference values, not against the implementation itself: the VDOT tests use Daniels' table, the Mini App tests use Telegram's published init data example.
 - Test HTTP handlers through `httptest`. The Telegram client can be tested without a token via `bot.WithSkipGetMe()` and `bot.WithServerURL()`; note that it sends `multipart/form-data`, not JSON.
-- For page changes, check a browser at 390 px width and in both colour schemes. The browser wasm exports can be called under Node through `assets/wasm_exec.js`.
+- For page changes, check a browser at 390 px width, in both colour schemes and in both languages. The browser wasm exports can be called under Node through `assets/wasm_exec.js`.
 - Run tests, lint and `./build.sh` before opening a pull request.
 
 ## Commit & Pull Request Guidelines
