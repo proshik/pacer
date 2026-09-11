@@ -5,6 +5,9 @@
 # target platform, so this stage runs on the build host's own platform.
 FROM --platform=$BUILDPLATFORM tinygo/tinygo:0.42.0 AS wasm
 
+# The image runs as the unprivileged tinygo user, which cannot create /out.
+# This stage is thrown away after the copy below, so root costs nothing here.
+USER root
 WORKDIR /src
 COPY go.mod go.sum ./
 COPY cmd/wasm ./cmd/wasm
