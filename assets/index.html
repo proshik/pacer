@@ -908,6 +908,7 @@
                 removeOffline: "Не получилось удалить расчёт — нет связи с сервером.",
                 save: "Сохранить расчёт",
                 runSaved: "Расчёт сохранён.",
+                saveFailed: "Не получилось сохранить расчёт.",
                 saveRejected: "Не получилось сохранить расчёт — проверьте дистанцию и время.",
                 saveOffline: "Не получилось сохранить расчёт — нет связи с сервером.",
                 share: "Скопировать ссылку на расчёт",
@@ -991,6 +992,7 @@
                 removeOffline: "Couldn't delete the run: no connection to the server.",
                 save: "Save run",
                 runSaved: "Run saved.",
+                saveFailed: "Couldn't save the run.",
                 saveRejected: "Couldn't save the run. Check the distance and time.",
                 saveOffline: "Couldn't save the run: no connection to the server.",
                 share: "Copy link to this run",
@@ -1800,26 +1802,102 @@
             }
         }
 
-        // "tma <initData>", когда пользователь вошёл через Mini App и история доступна.
-        let historyAuth = null;
+        // Сохранённые расчёты живут в одном из двух хранилищ с общим интерфейсом:
+        // list() — список новыми сверху или null, если хранилище недоступно;
+        // save() и remove() — null при успехе или ключ сообщения об ошибке.
+        const runsStorageKey = "pacer.runs";
+        const maxSavedRuns = 50; // как на сервере
 
-        function historyRequest(method, path, body) {
-            const headers = {Authorization: historyAuth};
-            if (body) {
-                headers["Content-Type"] = "application/json";
-            }
+        // На сервере — для вошедшего через Mini App, если сервер ведёт историю.
+        function serverRuns(initData) {
+            const request = (method, path, body) => {
+                const headers = {Authorization: "tma " + initData};
+                if (body) {
+                    headers["Content-Type"] = "application/json";
+                }
 
-            return fetch(path, {method, headers, body: body ? JSON.stringify(body) : undefined});
+                return fetch(path, {method, headers, body: body ? JSON.stringify(body) : undefined});
+            };
+
+            return {
+                async list() {
+                    const response = await request("GET", "/api/v1/runs");
+                    return response.ok ? (await response.json()).runs : null;
+                },
+                async save(distance, seconds) {
+                    try {
+                        const response = await request("POST", "/api/v1/runs", {distance, time_seconds: seconds});
+                        return response.ok ? null : "saveRejected";
+                    } catch (error) {
+                        console.error(error);
+                        return "saveOffline";
+                    }
+                },
+                async remove(id) {
+                    try {
+                        const response = await request("DELETE", `/api/v1/runs/${id}`);
+                        return response.ok || response.status === 404 ? null : "removeFailed";
+                    } catch (error) {
+                        console.error(error);
+                        return "removeOffline";
+                    }
+                }
+            };
         }
 
-        async function loadSavedRuns() {
-            const response = await historyRequest("GET", "/api/v1/runs");
-            if (!response.ok) {
-                return false;
+        // В этом браузере — всем остальным. null, если хранить нельзя: приватный
+        // режим или запрет сайтам хранить данные.
+        function localRuns() {
+            try {
+                localStorage.setItem(runsStorageKey + ".probe", "1");
+                localStorage.removeItem(runsStorageKey + ".probe");
+            } catch (error) {
+                return null;
             }
 
-            renderSavedRuns((await response.json()).runs);
-            return true;
+            const read = () => {
+                try {
+                    const runs = JSON.parse(localStorage.getItem(runsStorageKey) || "[]");
+                    return Array.isArray(runs) ? runs : [];
+                } catch (error) {
+                    return [];
+                }
+            };
+            const write = (runs) => {
+                try {
+                    localStorage.setItem(runsStorageKey, JSON.stringify(runs));
+                    return true;
+                } catch (error) {
+                    console.error(error);
+                    return false;
+                }
+            };
+
+            return {
+                async list() {
+                    return read();
+                },
+                async save(distance, seconds) {
+                    const runs = read();
+                    const id = runs.reduce((max, run) => Math.max(max, run.id), 0) + 1;
+                    runs.unshift({id, distance, time: {seconds}, saved_at: new Date().toISOString()});
+
+                    return write(runs.slice(0, maxSavedRuns)) ? null : "saveFailed";
+                },
+                async remove(id) {
+                    return write(read().filter((run) => run.id !== id)) ? null : "removeFailed";
+                }
+            };
+        }
+
+        let runStore = null;
+
+        async function refreshRuns() {
+            try {
+                renderSavedRuns((await runStore.list()) || []);
+            } catch (error) {
+                console.error(error);
+            }
         }
 
         // Последний загруженный список: смена языка перерисовывает его без запроса.
@@ -1867,58 +1945,57 @@
             byId("timeReadout").scrollIntoView({block: "center"});
         }
 
+        // Сохраняется план на экране, а не сырые поля: при ошибке в поле сумма
+        // часов, минут и секунд дала бы молча пересчитанное время.
         async function saveCurrentRun() {
-            const note = byId("shareNote");
+            if (!shownPlan) {
+                return;
+            }
 
-            try {
-                const response = await historyRequest("POST", "/api/v1/runs", {
-                    distance: Number(byId("distInput").value),
-                    time_seconds: timeSeconds()
-                });
-                if (!response.ok) {
-                    setText(note, "saveRejected");
-                    return;
-                }
-
-                setText(note, "runSaved");
-                await loadSavedRuns();
-            } catch (error) {
-                setText(note, "saveOffline");
-                console.error(error);
+            const failure = await runStore.save(shownPlan.dist, shownPlan.total);
+            setText(byId("shareNote"), failure || "runSaved");
+            if (!failure) {
+                await refreshRuns();
             }
         }
 
         async function deleteSavedRun(id) {
-            try {
-                const response = await historyRequest("DELETE", `/api/v1/runs/${id}`);
-                if (!response.ok && response.status !== 404) {
-                    setText(byId("shareNote"), "removeFailed");
-                    return;
-                }
-
-                await loadSavedRuns();
-            } catch (error) {
-                setText(byId("shareNote"), "removeOffline");
-                console.error(error);
-            }
-        }
-
-        // История появляется только если сервер её хранит: без DB_PATH он отвечает
-        // 503, и страница остаётся такой же, как в обычном браузере.
-        async function startHistory(initData) {
-            historyAuth = "tma " + initData;
-
-            try {
-                if (!(await loadSavedRuns())) {
-                    historyAuth = null;
-                    return;
-                }
-            } catch (error) {
-                historyAuth = null;
-                console.error(error);
+            const failure = await runStore.remove(id);
+            if (failure) {
+                setText(byId("shareNote"), failure);
                 return;
             }
 
+            await refreshRuns();
+        }
+
+        // Вошедшему через Mini App — история на сервере, если сервер её ведёт (без
+        // DB_PATH он отвечает 503); иначе расчёты хранятся в этом браузере.
+        // Хранилища не смешиваются. Без хранилища раздела нет.
+        async function startRuns(initData) {
+            if (initData) {
+                const server = serverRuns(initData);
+                try {
+                    const runs = await server.list();
+                    if (runs) {
+                        showRuns(server, runs);
+                        return;
+                    }
+                } catch (error) {
+                    console.error(error);
+                }
+            }
+
+            const local = localRuns();
+            if (local) {
+                showRuns(local, await local.list());
+            }
+        }
+
+        // Когда есть «Сохранить», ссылка становится второстепенным действием.
+        function showRuns(store, runs) {
+            runStore = store;
+            renderSavedRuns(runs);
             byId("savedSection").hidden = false;
             byId("saveButton").hidden = false;
             byId("saveButton").addEventListener("click", saveCurrentRun);
@@ -1935,7 +2012,6 @@
             // грузиться вовсе, и вход от этого страдать не должен.
             applyTelegramTheme(themeFromLaunch());
             greetTelegramUser(telegramLaunch.get("tgWebAppData"));
-            startHistory(telegramLaunch.get("tgWebAppData"));
 
             const webApp = await telegramSDK;
             if (!webApp) {
@@ -2074,6 +2150,7 @@
             loadWASM();
             startTelegram();
             registerServiceWorker();
+            startRuns(telegramLaunch.get("tgWebAppData"));
         });
     </script>
 </head>
