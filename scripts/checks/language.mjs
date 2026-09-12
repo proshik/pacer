@@ -307,7 +307,21 @@ try {
         checkConsole(s);
     }
 
-    // 7. Desktop screenshots for a visual pass.
+    // 7. Switching the language must not move the page: a translation is longer
+    // or shorter, but the layout has to absorb that, not pass it on.
+    {
+        const s = "layout";
+        for (const width of [390, 768, 1280]) {
+            await open({ acceptLanguage: "ru-RU,ru", width, mobile: width < 700 });
+            const before = await evaluate(`document.documentElement.scrollHeight`);
+            await clickLang("en");
+            await sleep(400);
+            const after = await evaluate(`document.documentElement.scrollHeight`);
+            check(s, `page height stays put at ${width} px`, before === after, { before, after });
+        }
+    }
+
+    // 8. Desktop screenshots for a visual pass.
     {
         await open({ acceptLanguage: "en-US,en", width: 1280, mobile: false });
         check("en desktop", "no horizontal scroll", !(await evaluate(REPORT)).hscroll);
