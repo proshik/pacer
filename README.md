@@ -259,7 +259,8 @@ WASM-версию. Для удобства в не-WASM окружении ря�
 1. Изменили backend (`main.go`, `pkg/...`) → `go run .`
 2. Изменили WASM-логику (`cmd/wasm/...`, `cmd/calcwasm/...`, `pkg/calculator/...`,
    `pkg/analysis/...`) → `./build.sh`, затем перезапуск сервера или обновление страницы.
-3. Изменили страницу → проверьте её на ширине 390 px и в обеих темах.
+3. Изменили страницу → `node scripts/checks/all.mjs`: проверки в headless Chrome (390 px, обе
+   темы, оба языка, офлайн, ошибки у полей, сохранённые расчёты).
 4. Перед коммитом:
 
 ```bash
@@ -268,13 +269,15 @@ go vet ./ ./pkg/...
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...
 go build ./...
 ./build.sh
+node scripts/checks/all.mjs
 ```
 
 ## CI
 
 Workflow `.github/workflows/ci.yml` запускается на каждый PR и на пуш в `master`/`main`:
 - `go test -race`, `go vet`, golangci-lint v2.13;
-- `./build.sh` с TinyGo 0.42 (`acifani/setup-tinygo`);
+- `./build.sh` с TinyGo 0.42 (`acifani/setup-tinygo`) и проверку, что закоммиченные
+  wasm-артефакты совпали с пересобранными (`git diff --exit-code`);
 - сборка сервера;
 - сборка Docker-образа (кроме PR); на тегах `v*` образ публикуется в Docker Hub.
 
