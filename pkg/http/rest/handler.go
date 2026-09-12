@@ -3,9 +3,10 @@ package rest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/NYTimes/gziphandler"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/go-telegram/bot/models"
+	"github.com/klauspost/compress/gzhttp"
 	"gorun/pkg/calculator"
+	"gorun/pkg/history"
 	"gorun/pkg/telegram"
 	"io"
 	"io/fs"
@@ -15,6 +16,17 @@ import (
 	"time"
 )
 
+// calcResponse is the public shape of a calculation result. Both the ready to
+// print form and the split parts are returned so callers do not reimplement the
+// formatting.
+type calcResponse struct {
+	Result       string `json:"result"`
+	TotalSeconds int    `json:"total_seconds"`
+	Hours        int    `json:"hours"`
+	Minutes      int    `json:"minutes"`
+	Seconds      int    `json:"seconds"`
+}
+
 type errorResponse struct {
 	Error   string            `json:"error"`
 	Details map[string]string `json:"details,omitempty"`
@@ -23,18 +35,28 @@ type errorResponse struct {
 func NewHandler(
 	debugMode bool,
 	tgToken string,
+	host string,
 	t *telegram.Service,
-	c *calculator.Service,
+	c calculator.Engine,
+	store *history.Store,
 	a fs.FS,
 ) (*http.ServeMux, error) {
 	serveMux := http.NewServeMux()
 	serveMux.HandleFunc("/healthz", healthCheck)
 
-	if debugMode {
-		// debug endpoints
-		serveMux.HandleFunc("/time", calculateTime(c))
-		serveMux.HandleFunc("/pace", calculatePace(c))
-	} else {
+	// The calculation API is part of the product, not a debug aid: the browser
+	// front end and any external caller reach it in every mode.
+	serveMux.HandleFunc("/api/v1/time", calculateTime(c))
+	serveMux.HandleFunc("/api/v1/pace", calculatePace(c))
+	serveMux.HandleFunc("/api/v1/splits", handleSplits)
+	serveMux.HandleFunc("/api/v1/predict", handlePredict)
+	serveMux.HandleFunc("/api/v1/vdot", handleVDOT)
+	serveMux.HandleFunc("/api/v1/me", handleMe(tgToken))
+	serveMux.HandleFunc("GET /api/v1/runs", listRunsHandler(tgToken, store))
+	serveMux.HandleFunc("POST /api/v1/runs", saveRunHandler(tgToken, store))
+	serveMux.HandleFunc("DELETE /api/v1/runs/{id}", deleteRunHandler(tgToken, store))
+
+	if !debugMode {
 		// handle telegram web hook messages
 		serveMux.HandleFunc(fmt.Sprintf("/%s", tgToken), handleWebHook(t))
 	}
@@ -44,95 +66,96 @@ func NewHandler(
 		return nil, fmt.Errorf("open embedded assets subfs: %w", err)
 	}
 
-	assetsDir := gziphandler.GzipHandler(http.FileServer(http.FS(stripped)))
+	assetsDir := gzhttp.GzipHandler(http.FileServer(http.FS(stripped)))
 	serveMux.Handle("/", assetsDir)
+
+	// The page itself goes out with a link preview built from the shared link.
+	if page, err := fs.ReadFile(stripped, "index.html"); err == nil {
+		serveMux.Handle("GET /{$}", gzhttp.GzipHandler(pageHandler(page, siteURL(host), c)))
+	}
 
 	return serveMux, nil
 }
 
-// calculateTime http://localhost:8080/time?pace=4m50s&dist=21095
-func calculateTime(c *calculator.Service) func(w http.ResponseWriter, r *http.Request) {
+// calculateTime GET /api/v1/time?pace=4m50s&dist=21095
+func calculateTime(c calculator.Engine) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 
 		details := map[string]string{}
-		distValue := query.Get("dist")
-		if distValue == "" {
-			details["dist"] = "field is required"
-		}
-
-		paceValue := query.Get("pace")
-		if paceValue == "" {
-			details["pace"] = "field is required"
-		}
-
-		dist, distErr := strconv.Atoi(distValue)
-		if distErr != nil {
-			details["dist"] = "incorrect type should be number"
-		} else if dist <= 0 {
-			details["dist"] = "value should be greater than zero"
-		}
-
-		paceDuration, paceErr := time.ParseDuration(paceValue)
-		if paceErr != nil {
-			details["pace"] = paceErr.Error()
-		}
+		dist := parseDistance(query.Get("dist"), details)
+		paceDuration := parseDurationField(query.Get("pace"), "pace", details)
 
 		if len(details) > 0 {
 			writeJSONError(w, http.StatusBadRequest, "validation failed", details)
 			return
 		}
 
-		result := c.Time(dist, paceDuration)
-
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte(result.String()))
+		writeCalcResult(w, c.Time(dist, paceDuration))
 	}
 }
 
-// calculatePace http://localhost:8080/pace?dist=21097&time=1h38m48s
-func calculatePace(c *calculator.Service) func(w http.ResponseWriter, r *http.Request) {
+// calculatePace GET /api/v1/pace?dist=21097&time=1h38m48s
+func calculatePace(c calculator.Engine) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 
 		details := map[string]string{}
-		distValue := query.Get("dist")
-		if distValue == "" {
-			details["dist"] = "field is required"
-		}
-
-		timeValue := query.Get("time")
-		if timeValue == "" {
-			details["time"] = "field is required"
-		}
-
-		dist, distErr := strconv.Atoi(distValue)
-		if distErr != nil {
-			details["dist"] = "incorrect type should be number"
-		} else if dist <= 0 {
-			details["dist"] = "value should be greater than zero"
-		}
-
-		timeDuration, timeErr := time.ParseDuration(timeValue)
-		if timeErr != nil {
-			details["time"] = timeErr.Error()
-		}
+		dist := parseDistance(query.Get("dist"), details)
+		timeDuration := parseDurationField(query.Get("time"), "time", details)
 
 		if len(details) > 0 {
 			writeJSONError(w, http.StatusBadRequest, "validation failed", details)
 			return
 		}
 
-		result := c.Pace(dist, timeDuration)
-
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte(result.String()))
+		writeCalcResult(w, c.Pace(dist, timeDuration))
 	}
+}
+
+// parseDistance validates the dist query parameter in meters, recording why it
+// was rejected in details. An empty value is reported as missing rather than as
+// a malformed number.
+func parseDistance(value string, details map[string]string) int {
+	if value == "" {
+		details["dist"] = "field is required"
+		return 0
+	}
+
+	dist, err := strconv.Atoi(value)
+	if err != nil {
+		details["dist"] = "incorrect type should be number"
+		return 0
+	}
+
+	if dist <= 0 {
+		details["dist"] = "value should be greater than zero"
+		return 0
+	}
+
+	return dist
+}
+
+// parseDurationField validates a Go duration query parameter, recording why it
+// was rejected under its own field name in details.
+func parseDurationField(value string, field string, details map[string]string) time.Duration {
+	if value == "" {
+		details[field] = "field is required"
+		return 0
+	}
+
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		details[field] = err.Error()
+		return 0
+	}
+
+	return duration
 }
 
 func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -141,7 +164,7 @@ func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		var update tgbotapi.Update
+		var update models.Update
 		if err = json.Unmarshal(data, &update); err != nil {
 			slog.Warn("decode webhook update failed", "err", err, "remote_addr", r.RemoteAddr)
 			writeJSONError(w, http.StatusBadRequest, "invalid telegram update payload", nil)
@@ -154,9 +177,24 @@ func handleWebHook(t *telegram.Service) func(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		t.DoUpdate(update)
+		t.DoUpdate(&update)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+	}
+}
+
+func writeCalcResult(w http.ResponseWriter, result time.Duration) {
+	hours, minutes, seconds := calculator.Split(result)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(calcResponse{
+		Result:       result.String(),
+		TotalSeconds: int(result.Seconds()),
+		Hours:        hours,
+		Minutes:      minutes,
+		Seconds:      seconds,
+	}); err != nil {
+		slog.Error("encode calculation result failed", "err", err)
 	}
 }
 
