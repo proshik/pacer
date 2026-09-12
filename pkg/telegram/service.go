@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"gorun/pkg/calculator"
+	"gorun/pkg/card"
 )
 
 // Queue sizes. Enqueues are non blocking: when a queue is full the update is
@@ -32,8 +34,9 @@ type Service struct {
 	startC   chan *models.Update
 	timeC    chan *models.Update
 	paceC    chan *models.Update
+	cardC    chan *models.Update
 	unknownC chan *models.Update
-	messages chan *bot.SendMessageParams
+	messages chan outgoing
 	done     chan struct{}
 
 	polling       bool
@@ -50,8 +53,9 @@ func newService(engine calculator.Engine) *Service {
 		startC:     make(chan *models.Update, updateQueueSize),
 		timeC:      make(chan *models.Update, updateQueueSize),
 		paceC:      make(chan *models.Update, updateQueueSize),
+		cardC:      make(chan *models.Update, updateQueueSize),
 		unknownC:   make(chan *models.Update, updateQueueSize),
-		messages:   make(chan *bot.SendMessageParams, messageQueueSize),
+		messages:   make(chan outgoing, messageQueueSize),
 		done:       make(chan struct{}),
 	}
 }
@@ -190,6 +194,8 @@ func (s *Service) handleUpdate(update *models.Update) {
 		s.enqueueUpdate(s.timeC, command, update)
 	case "pace":
 		s.enqueueUpdate(s.paceC, command, update)
+	case "card":
+		s.enqueueUpdate(s.cardC, command, update)
 	default:
 		s.enqueueUpdate(s.unknownC, command, update)
 	}
@@ -205,11 +211,11 @@ func (s *Service) enqueueUpdate(ch chan *models.Update, source string, update *m
 	}
 }
 
-func (s *Service) enqueueMessage(message *bot.SendMessageParams) {
+func (s *Service) enqueueMessage(reply outgoing) {
 	select {
 	case <-s.done:
 		return
-	case s.messages <- message:
+	case s.messages <- reply:
 	default:
 		slog.Warn("telegram outgoing message dropped: queue is full")
 	}
@@ -230,6 +236,8 @@ func (s *Service) startDispatcher() {
 				s.enqueueMessage(s.handleTimeCmd(u))
 			case u := <-s.paceC:
 				s.enqueueMessage(s.handlePaceCmd(u))
+			case u := <-s.cardC:
+				s.enqueueMessage(s.handleCardCmd(u))
 			case u := <-s.unknownC:
 				s.enqueueMessage(handleUnknownCmd(u))
 			}
@@ -246,10 +254,10 @@ func (s *Service) startSender() {
 			select {
 			case <-s.done:
 				return
-			case msg := <-s.messages:
+			case reply := <-s.messages:
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				if _, err := s.bot.SendMessage(ctx, msg); err != nil {
-					slog.Error("send telegram message failed", "err", err)
+				if err := reply.send(ctx, s.bot); err != nil {
+					slog.Error("send telegram reply failed", "err", err)
 				}
 				cancel()
 			}
@@ -291,17 +299,43 @@ func buildWebhookURL(host, token string) (string, error) {
 	return webhookURL.String(), nil
 }
 
-func handleStartCmd(update *models.Update) *bot.SendMessageParams {
+// outgoing is a reply on its way to Telegram: words or a picture. The sender
+// goroutine does not care which.
+type outgoing interface {
+	send(ctx context.Context, client *bot.Bot) error
+}
+
+type textReply struct {
+	params *bot.SendMessageParams
+}
+
+func (r textReply) send(ctx context.Context, client *bot.Bot) error {
+	_, err := client.SendMessage(ctx, r.params)
+
+	return err
+}
+
+type photoReply struct {
+	params *bot.SendPhotoParams
+}
+
+func (r photoReply) send(ctx context.Context, client *bot.Bot) error {
+	_, err := client.SendPhoto(ctx, r.params)
+
+	return err
+}
+
+func handleStartCmd(update *models.Update) outgoing {
 	return buildMsg(update, textsFor(update.Message).greeting)
 }
 
-func handleUnknownCmd(update *models.Update) *bot.SendMessageParams {
+func handleUnknownCmd(update *models.Update) outgoing {
 	command, _ := parseCommand(update.Message)
 
 	return buildMsg(update, fmt.Sprintf(textsFor(update.Message).unknownCommand, command))
 }
 
-func (s *Service) handleTimeCmd(update *models.Update) *bot.SendMessageParams {
+func (s *Service) handleTimeCmd(update *models.Update) outgoing {
 	t := textsFor(update.Message)
 
 	arguments := extractArguments(update)
@@ -326,7 +360,7 @@ func (s *Service) handleTimeCmd(update *models.Update) *bot.SendMessageParams {
 	return buildMsg(update, s.calculator.Time(dist, paceDuration).String())
 }
 
-func (s *Service) handlePaceCmd(update *models.Update) *bot.SendMessageParams {
+func (s *Service) handlePaceCmd(update *models.Update) outgoing {
 	t := textsFor(update.Message)
 
 	arguments := extractArguments(update)
@@ -351,15 +385,53 @@ func (s *Service) handlePaceCmd(update *models.Update) *bot.SendMessageParams {
 	return buildMsg(update, s.calculator.Pace(dist, timeDuration).String())
 }
 
+// handleCardCmd draws the plan as a picture, which forwards into a chat as one
+// message and shows the splits a line of text cannot.
+func (s *Service) handleCardCmd(update *models.Update) outgoing {
+	t := textsFor(update.Message)
+
+	arguments := extractArguments(update)
+	if len(arguments) == 0 {
+		return buildMsg(update, t.emptyArguments)
+	}
+
+	if len(arguments) != 2 {
+		return buildMsg(update, t.paceArgCount)
+	}
+
+	dist, err := strconv.Atoi(arguments[0])
+	if err != nil {
+		return buildMsg(update, t.invalidDist+arguments[0])
+	}
+
+	raceTime, err := time.ParseDuration(arguments[1])
+	if err != nil {
+		return buildMsg(update, t.invalidTime+arguments[1])
+	}
+
+	plan := card.Plan{Distance: dist, Time: raceTime, Language: t.language}
+	picture, err := card.Render(plan)
+	if err != nil {
+		slog.Warn("draw card failed", "err", err, "dist", dist, "time", raceTime)
+		return buildMsg(update, t.cardFailed)
+	}
+
+	return photoReply{params: &bot.SendPhotoParams{
+		ChatID:  update.Message.Chat.ID,
+		Photo:   &models.InputFileUpload{Filename: "pacer.png", Data: bytes.NewReader(picture)},
+		Caption: card.Caption(plan),
+	}}
+}
+
 func extractArguments(update *models.Update) []string {
 	_, arguments := parseCommand(update.Message)
 
 	return strings.Fields(arguments)
 }
 
-func buildMsg(update *models.Update, text string) *bot.SendMessageParams {
-	return &bot.SendMessageParams{
+func buildMsg(update *models.Update, text string) outgoing {
+	return textReply{params: &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   text,
-	}
+	}}
 }

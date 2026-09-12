@@ -9,6 +9,7 @@
   - `pkg/telegram/` — bot commands on `github.com/go-telegram/bot`, with bounded queues and worker goroutines.
   - `pkg/miniapp/` — validation of Telegram Mini App init data.
   - `pkg/history/` — saved runs in SQLite (`modernc.org/sqlite`, no cgo).
+  - `pkg/card/` — the plan drawn as a PNG for a chat, with the Go fonts; no font file lives in the repository.
   - `pkg/wasmcalc/` — runs `calc.wasm` on the server through wazero when `CALC_ENGINE=wasm`.
 - `cmd/wasm/` — browser bundle (`js && wasm`), built with TinyGo into `assets/json.wasm`.
 - `cmd/calcwasm/` — server WASI reactor (`wasip1`, `go:wasmexport`), built into `pkg/wasmcalc/calc.wasm`.
