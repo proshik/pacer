@@ -6,7 +6,7 @@
   - `pkg/calculator/` — pure formulas with no I/O: pace and time, even splits, Riegel and Cameron predictions, Daniels VDOT and training paces.
   - `pkg/analysis/` — response shapes for splits, predictions and VDOT, shared by the HTTP API and the browser wasm so both return identical JSON.
   - `pkg/http/rest/` — HTTP API (`/api/v1/...`), health check, Telegram webhook, the static files and the page itself, whose link preview tags carry the plan from a shared link (`preview.go`).
-  - `pkg/telegram/` — bot commands on `github.com/go-telegram/bot`, with bounded queues and worker goroutines.
+  - `pkg/telegram/` — bot commands on `github.com/go-telegram/bot`, with bounded queues and worker goroutines; a reply is a `textReply` or a `photoReply`, so `/card` answers with a picture.
   - `pkg/miniapp/` — validation of Telegram Mini App init data.
   - `pkg/history/` — saved runs in SQLite (`modernc.org/sqlite`, no cgo).
   - `pkg/card/` — the plan drawn as a PNG for a chat, with the Go fonts; no font file lives in the repository.

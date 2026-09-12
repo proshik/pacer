@@ -37,17 +37,19 @@
 |---|---|
 | `pkg/calculator` | формулы без I/O: время, темп, сплиты, прогноз Ригеля и Кэмерона, VDOT и зоны |
 | `pkg/analysis` | ответы для раскладки, прогноза и VDOT — общие для API и браузерного WASM |
-| `pkg/http/rest` | HTTP API, проверка здоровья, вебхук Telegram, раздача страницы |
-| `pkg/telegram` | бот на `go-telegram/bot`: команды `/start`, `/time`, `/pace` |
+| `pkg/http/rest` | HTTP API, проверка здоровья, вебхук Telegram, страница и превью ссылки |
+| `pkg/telegram` | бот на `go-telegram/bot`: команды `/start`, `/time`, `/pace`, `/card` |
 | `pkg/miniapp` | проверка подписи данных запуска Mini App (`initData`) |
 | `pkg/history` | сохранённые расчёты в SQLite (`modernc.org/sqlite`, без cgo) |
 | `pkg/wasmcalc` | исполнение `calc.wasm` на сервере через wazero |
+| `pkg/card` | план картинкой (PNG) для чата, на шрифтах Go — свой TTF не нужен |
 
 ## Требования
 
 - Go 1.26+
-- TinyGo 0.42+ — собирает браузерный бандл (`brew tap tinygo-org/tools`,
-  `brew trust --formula tinygo-org/tools/tinygo`, `brew install tinygo`)
+- TinyGo 0.42+ — нужен только для пересборки браузерного бандла (`brew tap tinygo-org/tools`,
+  `brew trust --formula tinygo-org/tools/tinygo`, `brew install tinygo`); образ берёт готовый
+  `assets/json.wasm` из репозитория
 - Docker (опционально)
 
 ## Переменные окружения

@@ -37,6 +37,11 @@ go run .                    # запуск сервера (подхватыва�
 
 Полный набор проверок перед коммитом повторяет `.github/workflows/ci.yml`: `go test -race`,
 `go vet`, golangci-lint v2.13 (через `go run`, см. ниже), `./build.sh` на TinyGo, `go build ./...`.
+Страницу это не покрывает: её проверяют четыре скрипта на Node с headless Chrome (языки,
+офлайн и установка, ошибки у полей, сохранённые расчёты). В репозитории их нет — они пишутся
+во временный каталог сессии, поэтому при правках страницы их приходится писать заново по
+рецепту из раздела «Проверка страницы без браузерного расширения».
+
 Пользовательская документация — README (на русском) и `AGENTS.md` (на английском); после заметных
 изменений их нужно обновлять вместе с `PLAN.md`.
 
@@ -109,7 +114,7 @@ IDE и `go build ./...` не падали с «build constraints exclude all Go 
 | Telegram | `deleteWebhook`, затем long-polling | `setWebhook` на `HOST/<token>` |
 | Роуты | — | вебхук `POST /<TELEGRAM_TOKEN>` |
 
-`/healthz`, раздача статики и API (`/api/v1/time`, `/pace`, `/splits`, `/predict`, `/vdot`, `/me`, `/runs`) регистрируются в обоих
+`/healthz`, раздача статики и API (`/api/v1/time`, `/pace`, `/splits`, `/predict`, `/vdot`, `/me`, `/runs`, `/card.png`) регистрируются в обоих
 режимах — набор роутов больше не зависит от уровня логирования. Хост вебхука обязан быть
 `https` (`buildWebhookURL`), поэтому `DEBUG=false` невозможно проверить на `http://localhost`.
 
@@ -118,8 +123,8 @@ IDE и `go build ./...` не падали с «build constraints exclude all Go 
 Клиент — `github.com/go-telegram/bot` (Bot API 10.3, без зависимостей).
 
 `telegram.NewService` запускает три горутины под общим `sync.WaitGroup`: диспетчер
-(разводит `startC`/`timeC`/`paceC`/`unknownC` по хендлерам), отправитель (вычитывает
-`messages` и шлёт через `bot.SendMessage`) и — только в режиме polling — `bot.Start`.
+(разводит `startC`/`timeC`/`paceC`/`cardC`/`unknownC` по хендлерам), отправитель (вычитывает
+`messages` и вызывает `send` у `textReply` или `photoReply`) и — только в режиме polling — `bot.Start`.
 Все отправки в каналы неблокирующие, с веткой `default:` (drop + warn): при переполнении
 очереди апдейт теряется, но хендлер вебхука не блокируется. `Close(ctx)` один раз закрывает
 `done`, отменяет контекст polling и ждёт WaitGroup; `main.go` вызывает его после
