@@ -46,9 +46,12 @@ go run .                    # запуск сервера (подхватыва�
 публичных модулей этого проекта. Если скачивание модулей падает, добавляй префикс
 `GOPROXY=https://proxy.golang.org,direct` к go-командам.
 
-TinyGo 0.42 стоит из tap'а `tinygo-org/tools`: доверена только формула
-(`brew trust --formula tinygo-org/tools/tinygo`). TinyGo собирается поверх установленного Go и
-поддерживает Go 1.23–1.27; после обновления Go до 1.28 его может понадобиться обновить.
+TinyGo на 2026-09-12 **не установлен**, поэтому `./build.sh` на этой машине не работает — он
+печатает подсказку и выходит. Ставится из tap'а `tinygo-org/tools`, где доверена только формула:
+`brew tap tinygo-org/tools && brew trust --formula tinygo-org/tools/tinygo && brew install tinygo`.
+TinyGo собирается поверх установленного Go и поддерживает Go 1.23–1.27; после обновления Go до
+1.28 его может понадобиться обновить. Запасной путь без TinyGo — `WASM_COMPILER=go ./build.sh`,
+но он даёт другой по размеру `json.wasm` (4,5 МБ вместо 0,93 МБ), и коммитить такой бандл не надо.
 
 `node` стоит из Homebrew: `/opt/homebrew/bin/node` (v26). Каталога `~/.nvm/versions` на машине
 больше нет.
