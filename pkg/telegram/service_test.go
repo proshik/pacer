@@ -195,19 +195,99 @@ func TestHandlePaceCmdCalculatesPace(t *testing.T) {
 	}
 }
 
+// A reply about the argument count names the two arguments the command wants,
+// so the sender does not have to guess their order from an abbreviation.
 func TestCommandsRejectWrongArgumentCount(t *testing.T) {
 	s := newService(calculator.NewService())
 
-	for _, text := range []string{"/time 5m0s", "/pace 10000"} {
+	tests := []struct {
+		text string
+		want []string
+	}{
+		{text: "/time 5m0s", want: []string{"pace", "distance"}},
+		{text: "/pace 10000", want: []string{"distance", "time"}},
+	}
+
+	for _, tt := range tests {
 		var got string
-		if strings.HasPrefix(text, "/time") {
-			got = messageText(t, s.handleTimeCmd(newCommandUpdate(text)))
+		if strings.HasPrefix(tt.text, "/time") {
+			got = messageText(t, s.handleTimeCmd(newCommandUpdate(tt.text)))
 		} else {
-			got = messageText(t, s.handlePaceCmd(newCommandUpdate(text)))
+			got = messageText(t, s.handlePaceCmd(newCommandUpdate(tt.text)))
 		}
 
-		if !strings.Contains(got, "2 arguments") {
-			t.Errorf("%q: expected a complaint about argument count, got %q", text, got)
+		for _, want := range tt.want {
+			if !strings.Contains(got, want) {
+				t.Errorf("%q: reply %q does not name %q", tt.text, got, want)
+			}
+		}
+	}
+}
+
+// Telegram shows the command menu in the user's language when the bot
+// publishes one menu per language.
+func TestCommandMenuIsPublishedInBothLanguages(t *testing.T) {
+	type published struct {
+		language string
+		commands string
+	}
+
+	received := make(chan published, 4)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/setMyCommands") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		select {
+		case received <- published{language: r.FormValue("language_code"), commands: r.FormValue("commands")}:
+		default:
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+	}))
+	defer server.Close()
+
+	client, err := bot.New("test-token", bot.WithSkipGetMe(), bot.WithServerURL(server.URL))
+	if err != nil {
+		t.Fatalf("create bot client: %v", err)
+	}
+
+	if err := publishCommands(context.Background(), client); err != nil {
+		t.Fatalf("publish commands: %v", err)
+	}
+
+	menus := map[string]string{}
+	for range 2 {
+		select {
+		case got := <-received:
+			menus[got.language] = got.commands
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timed out waiting for a command menu, got %v", menus)
+		}
+	}
+
+	for language, commands := range map[string]bool{"": false, "ru": true} {
+		menu, ok := menus[language]
+		if !ok {
+			t.Fatalf("no menu for language %q, got %v", language, menus)
+		}
+
+		for _, command := range []string{"start", "time", "pace"} {
+			if !strings.Contains(menu, `"command":"`+command+`"`) {
+				t.Errorf("menu for %q lacks /%s: %s", language, command, menu)
+			}
+		}
+
+		if hasCyrillic(menu) != commands {
+			t.Errorf("menu for %q = %s, want Russian: %v", language, menu, commands)
 		}
 	}
 }

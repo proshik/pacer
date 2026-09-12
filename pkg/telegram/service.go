@@ -76,6 +76,11 @@ func NewService(ctx context.Context, debugMode bool, host string, token string, 
 	s.startDispatcher()
 	s.startSender()
 
+	// The menu is a nicety: failing to publish it must not keep the bot down.
+	if err := publishCommands(ctx, client); err != nil {
+		slog.Warn("publish command menu failed", "err", err)
+	}
+
 	if debugMode {
 		if _, err := client.DeleteWebhook(ctx, &bot.DeleteWebhookParams{DropPendingUpdates: true}); err != nil {
 			return nil, fmt.Errorf("delete webhook in debug mode: %w", err)
