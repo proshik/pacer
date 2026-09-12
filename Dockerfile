@@ -1,21 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# Browser bundle. TinyGo makes json.wasm about five times smaller than the
-# standard toolchain with byte-identical results. Wasm does not depend on the
-# target platform, so this stage runs on the build host's own platform.
-FROM --platform=$BUILDPLATFORM tinygo/tinygo:0.42.0 AS wasm
-
-# The image runs as the unprivileged tinygo user, which cannot create /out.
-# This stage is thrown away after the copy below, so root costs nothing here.
-USER root
-WORKDIR /src
-COPY go.mod go.sum ./
-COPY cmd/wasm ./cmd/wasm
-COPY pkg ./pkg
-RUN mkdir -p /out \
-	&& tinygo build -target=wasm -no-debug -o /out/json.wasm ./cmd/wasm \
-	&& cp "$(tinygo env TINYGOROOT)/targets/wasm_exec.js" /out/wasm_exec.js
-
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
@@ -28,11 +12,9 @@ RUN go mod download
 
 COPY . ./
 
-# The browser bundle comes from the TinyGo stage together with its own
-# wasm_exec.js; the server's WASI reactor is built with the standard toolchain.
-COPY --from=wasm /out/json.wasm /out/wasm_exec.js ./assets/
-RUN GOOS=wasip1 GOARCH=wasm go build -trimpath -buildvcs=false -buildmode=c-shared \
-		-o ./pkg/wasmcalc/calc.wasm ./cmd/calcwasm
+# Both wasm artifacts are committed, and CI fails when ./build.sh changes them,
+# so the image ships exactly what was tested instead of a rebuild whose
+# toolchain differs from the one the artifacts were checked with.
 
 # Build the Linux backend binary with embedded assets.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/pacer .

@@ -20,7 +20,7 @@
 - `go vet ./ ./pkg/...` — static checks.
 - `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...` — lint with the CI version, built by the local toolchain.
 - `go build ./...` — compile everything, including the host fallbacks of the wasm commands.
-- `./build.sh` — rebuild both wasm artifacts: TinyGo for the browser, the standard toolchain for the server reactor; `WASM_COMPILER=go ./build.sh` builds the browser bundle with the standard toolchain. Run it after changing `cmd/wasm`, `cmd/calcwasm`, `pkg/calculator` or `pkg/analysis`, and commit the artifacts.
+- `./build.sh` — rebuild both wasm artifacts: TinyGo for the browser, the standard toolchain for the server reactor; `WASM_COMPILER=go ./build.sh` builds the browser bundle with the standard toolchain. Run it after changing `cmd/wasm`, `cmd/calcwasm`, `pkg/calculator` or `pkg/analysis`, and commit the artifacts. The image does not rebuild them: it embeds the committed files, and CI fails when `./build.sh` leaves a diff.
 - `PORT=8080 TELEGRAM_TOKEN=... HOST=... DEBUG=true go run .` — run locally. The server contacts Telegram at startup, so it needs a real token; `DEBUG=true` deletes the bot's webhook, so use a separate test bot.
 - `python3 -m http.server 8080 -d assets` — serve only the page; the calculator runs entirely in the browser.
 

@@ -42,6 +42,11 @@ jobs:
       - name: Build WASM
         run: ./build.sh
 
+      # The image ships the committed artifacts, so a stale json.wasm or
+      # calc.wasm has to fail here rather than reach production.
+      - name: Check the committed wasm is current
+        run: git diff --exit-code -- assets/json.wasm assets/wasm_exec.js pkg/wasmcalc/calc.wasm
+
       - name: Build app
         run: go build ./ ./pkg/...
 
