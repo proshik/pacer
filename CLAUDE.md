@@ -162,6 +162,9 @@ IDE и `go build ./...` не падали с «build constraints exclude all Go 
 обычное — это вывод из официальной формулировки и из кода init-data-golang. Подтвердить его
 окончательно может только живой запуск в Telegram.
 
+При успешном входе сервер пишет в debug-лог `mini app sign-in` с `language_code` и признаком
+`signature`: по нему видно, что прислал живой клиент, не трогая сам клиент.
+
 ### История расчётов
 
 `pkg/history` — SQLite через `modernc.org/sqlite`: это чистый Go, а образ собирается с
