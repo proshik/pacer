@@ -156,7 +156,13 @@ const REPORT = `(() => {
     document.querySelectorAll("[aria-label]").forEach((el) => {
         if (!el.closest("body [lang]")) texts.push(el.getAttribute("aria-label"));
     });
-    const switcher = document.getElementById("langSwitch");
+    const pressed = document.querySelector('.lang-option[aria-pressed="true"]');
+    // The glyphs, not the element: a box taller than its line would line up
+    // with the switch while the word itself sits higher.
+    const wordmarkText = document.createRange();
+    wordmarkText.selectNodeContents(document.querySelector(".wordmark"));
+    const wordmark = wordmarkText.getBoundingClientRect();
+    const pill = document.querySelector(".lang-switch").getBoundingClientRect();
     return {
         lang: document.documentElement.lang,
         plan: document.getElementById("planLine").textContent,
@@ -166,8 +172,9 @@ const REPORT = `(() => {
         error: ["distanceError", "timeError", "paceError"].map((id) => document.getElementById(id).textContent).join(" ").trim(),
         saved: [...document.querySelectorAll("#savedList li")].map((li) => li.querySelector(".saved-open").innerText.replace(/\\n/g, " | ")),
         savedVisible: !document.getElementById("savedSection").hidden,
-        switchTo: switcher && switcher.dataset.lang,
-        switchText: switcher && switcher.textContent,
+        pressed: pressed && pressed.dataset.lang,
+        options: [...document.querySelectorAll(".lang-option")].map((b) => b.textContent).join("/"),
+        offset: Math.abs((wordmark.top + wordmark.bottom) / 2 - (pill.top + pill.bottom) / 2),
         stored: localStorage.getItem(${JSON.stringify(STORAGE_KEY)}),
         cyrillic: texts.join(" ").match(/[\\u0400-\\u04FF]+/g) || [],
         hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth
@@ -189,9 +196,7 @@ async function input(id, value) {
 }
 
 async function clickLang(code) {
-    const offered = await evaluate(`document.getElementById("langSwitch").dataset.lang`);
-    if (offered !== code) throw new Error(`switch offers ${offered}, wanted ${code}`);
-    await evaluate(`document.getElementById("langSwitch").click(), true`);
+    await evaluate(`document.querySelector('.lang-option[data-lang="${code}"]').click(), true`);
     await sleep(200);
 }
 
@@ -210,7 +215,8 @@ try {
         check(s, "html lang is ru", r.lang === "ru", r.lang);
         check(s, "plan line in Russian", r.plan === `Полумарафон за 1:25:39${NBSP}— это${NBSP}4:04 на километр`, r.plan);
         check(s, "km uses a decimal comma", r.km === `21,097${NBSP}км`, r.km);
-        check(s, "switch offers English", r.switchTo === "en" && r.switchText === "English", [r.switchTo, r.switchText]);
+        check(s, "RU/EN switch with RU pressed", r.options === "RU/EN" && r.pressed === "ru", [r.options, r.pressed]);
+        check(s, "switch sits on the line of the wordmark", r.offset <= 1, r.offset);
         const share = new URL(await evaluate(`shareURL()`));
         check(s, "share link carries the plan and the language", share.searchParams.get("d") === "21097"
             && share.searchParams.get("t") === "1:25:39" && share.searchParams.get("l") === "ru", share.href);
@@ -229,7 +235,7 @@ try {
         check(s, "plan line in English", r.plan === `Half marathon in 1:25:39${NBSP}— that's${NBSP}4:04 per kilometer`, r.plan);
         check(s, "km uses a decimal point", r.km === `21.097${NBSP}km`, r.km);
         check(s, "VDOT uses a decimal point", /^\d+\.\d$/.test(r.vdot), r.vdot);
-        check(s, "switch offers Русский", r.switchTo === "ru" && r.switchText === "Русский", [r.switchTo, r.switchText]);
+        check(s, "EN is pressed", r.pressed === "en", r.pressed);
         const share = new URL(await evaluate(`shareURL()`));
         check(s, "share link names English", share.searchParams.get("l") === "en", share.href);
         check(s, "no horizontal scroll", !r.hscroll);
@@ -273,7 +279,7 @@ try {
         await send("Page.reload");
         await waitFor(() => evaluate(`document.readyState === "complete" && document.body.dataset.state === "ready"`), 20000, "reload");
         r = await evaluate(REPORT);
-        check(s, "choice survives a reload", r.lang === "en" && r.switchTo === "ru", [r.lang, r.switchTo]);
+        check(s, "choice survives a reload", r.lang === "en" && r.pressed === "en", [r.lang, r.pressed]);
         checkConsole(s);
     }
 
