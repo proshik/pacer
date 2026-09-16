@@ -220,66 +220,93 @@ func Parse(text string) (Plan, error) {
 	return ParseAs(text, Auto)
 }
 
-// ParseAs reads a request whose clock means what kind says; words the parser
-// does not know, such as "за" or "in", are skipped.
+// ParseAs reads a request whose clock means what kind says; filler words
+// such as "за" or "in" are skipped.
 func ParseAs(text string, kind Kind) (Plan, error) {
-	tokens := strings.Fields(strings.ToLower(text))
+	s := scanText(text)
 
-	var (
-		distances []int
-		clocks    []clock
-		paceSaid  = kind == Pace
-	)
+	switch {
+	case len(s.distances) == 0:
+		return Plan{}, ErrNoDistance
+	case len(s.clocks) == 0:
+		return Plan{}, ErrNoTime
+	case len(s.distances) > 1 || len(s.clocks) > 1:
+		return Plan{}, ErrAmbiguous
+	}
+
+	if s.paceSaid {
+		kind = Pace
+	}
+
+	return resolve(s.distances[0], s.clocks[0], kind)
+}
+
+// Unrecognized lists the words of a request that are neither a distance, a
+// clock, a unit nor a filler, so a reply can quote what it did not understand.
+func Unrecognized(text string) []string {
+	return scanText(text).unknown
+}
+
+// fillers are the words a request carries around its numbers: "марафон за
+// 3:30", "half in 1:45", "4:50 per km".
+var fillers = map[string]bool{
+	"in": true, "at": true, "for": true, "per": true, "a": true, "the": true,
+	"за": true, "на": true, "в": true, "по": true, "это": true,
+}
+
+type scan struct {
+	distances []int
+	clocks    []clock
+	paceSaid  bool
+	unknown   []string
+}
+
+func scanText(text string) scan {
+	var s scan
+	tokens := strings.Fields(strings.ToLower(text))
 
 	for i := 0; i < len(tokens); i++ {
 		token := tokens[i]
 
 		for _, marker := range []string{"/km", "/км"} {
 			if trimmed, found := strings.CutSuffix(token, marker); found {
-				token, paceSaid = trimmed, true
+				token, s.paceSaid = trimmed, true
 			}
 		}
-		if token == "pace" || token == "темп" {
-			paceSaid = true
+
+		switch {
+		case token == "":
 			continue
-		}
-		if token == "" {
+		case token == "pace" || token == "темп":
+			s.paceSaid = true
+			continue
+		case fillers[token] || isUnit(token):
 			continue
 		}
 
 		// A number and its unit written apart: "21,1 км", "5 mi".
 		if i+1 < len(tokens) && isUnit(tokens[i+1]) {
 			if meters, ok := ParseDistance(token + tokens[i+1]); ok {
-				distances = append(distances, meters)
+				s.distances = append(s.distances, meters)
 				i++
 				continue
 			}
 		}
 
 		if c, ok := parseClock(token); ok {
-			clocks = append(clocks, c)
+			s.clocks = append(s.clocks, c)
 			continue
 		}
 
 		if meters, ok := ParseDistance(token); ok {
-			distances = append(distances, meters)
+			s.distances = append(s.distances, meters)
+			continue
 		}
+
+		s.unknown = append(s.unknown, tokens[i])
 	}
 
-	switch {
-	case len(distances) == 0:
-		return Plan{}, ErrNoDistance
-	case len(clocks) == 0:
-		return Plan{}, ErrNoTime
-	case len(distances) > 1 || len(clocks) > 1:
-		return Plan{}, ErrAmbiguous
-	}
-
-	if paceSaid {
-		kind = Pace
-	}
-
-	return resolve(distances[0], clocks[0], kind)
+	return s
 }
 
 func resolve(distance int, c clock, kind Kind) (Plan, error) {
@@ -305,4 +332,40 @@ func resolve(distance int, c clock, kind Kind) (Plan, error) {
 
 func plausible(pace time.Duration) bool {
 	return pace >= fastestPace && pace <= slowestPace
+}
+
+// Split is the time from the start at a mark, running at an even pace.
+type Split struct {
+	Distance int // meters
+	Elapsed  time.Duration
+}
+
+// Splits marks the plan every step metres at an even pace. The last mark is
+// the finish, so a table always ends on the planned time.
+func (p Plan) Splits(step int) []Split {
+	if step <= 0 || p.Distance <= 0 {
+		return nil
+	}
+
+	var splits []Split
+	for mark := step; mark < p.Distance; mark += step {
+		elapsed := time.Duration(int64(p.Time) * int64(mark) / int64(p.Distance))
+		splits = append(splits, Split{Distance: mark, Elapsed: elapsed})
+	}
+
+	return append(splits, Split{Distance: p.Distance, Elapsed: p.Time})
+}
+
+// SplitStep picks the finest round step that keeps a split table within
+// maxRows rows: every kilometre while that fits, then 5, 10, 20, 50 or 100 km.
+func SplitStep(distance, maxRows int) int {
+	steps := []int{1000, 5000, 10000, 20000, 50000, 100000}
+	for _, step := range steps {
+		rows := (distance + step - 1) / step // the marks and the finish
+		if rows <= maxRows {
+			return step
+		}
+	}
+
+	return steps[len(steps)-1]
 }
