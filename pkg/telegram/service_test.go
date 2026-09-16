@@ -12,8 +12,6 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-
-	"gorun/pkg/calculator"
 )
 
 // newCommandUpdate builds an update shaped the way Telegram sends a command:
@@ -32,14 +30,14 @@ func newCommandUpdate(text string) *models.Update {
 				Offset: 0,
 				Length: len(command),
 			}},
-			Chat: models.Chat{ID: 42},
+			Chat: models.Chat{ID: 42, Type: models.ChatTypePrivate},
 		},
 	}
 }
 
 func newPlainUpdate(text string) *models.Update {
 	return &models.Update{
-		Message: &models.Message{Text: text, Chat: models.Chat{ID: 42}},
+		Message: &models.Message{Text: text, Chat: models.Chat{ID: 42, Type: models.ChatTypePrivate}},
 	}
 }
 
@@ -65,7 +63,7 @@ func messageText(t *testing.T, reply outgoing) string {
 func newTestService(t *testing.T) *Service {
 	t.Helper()
 
-	s := newService(calculator.NewService())
+	s := newService()
 	s.startDispatcher()
 
 	t.Cleanup(func() {
@@ -125,7 +123,7 @@ func TestParseCommand(t *testing.T) {
 					Offset: 8,
 					Length: 5,
 				}},
-				Chat: models.Chat{ID: 42},
+				Chat: models.Chat{ID: 42, Type: models.ChatTypePrivate},
 			}},
 		},
 	}
@@ -145,7 +143,7 @@ func TestParseCommand(t *testing.T) {
 }
 
 func TestHandleTimeCmdReportsOffendingPaceArgument(t *testing.T) {
-	s := newService(calculator.NewService())
+	s := newService()
 
 	text := messageText(t, s.handleTimeCmd(newCommandUpdate("/time notapace 21095")))
 
@@ -155,7 +153,7 @@ func TestHandleTimeCmdReportsOffendingPaceArgument(t *testing.T) {
 }
 
 func TestHandlePaceCmdReportsOffendingTimeArgument(t *testing.T) {
-	s := newService(calculator.NewService())
+	s := newService()
 
 	text := messageText(t, s.handlePaceCmd(newCommandUpdate("/pace 21097 nottime")))
 
@@ -187,25 +185,25 @@ func TestPlainMessageIsAnsweredWithGreeting(t *testing.T) {
 }
 
 func TestHandleTimeCmdCalculatesTime(t *testing.T) {
-	s := newService(calculator.NewService())
+	s := newService()
 
-	if got, want := messageText(t, s.handleTimeCmd(newCommandUpdate("/time 5m0s 10000"))), "50m0s"; got != want {
-		t.Fatalf("time for 10 km at 5:00/km = %q, want %q", got, want)
+	if got, want := messageText(t, s.handleTimeCmd(newCommandUpdate("/time 5m0s 10000"))), "10 km in 50:00 — that's 5:00 per kilometer"; !strings.Contains(got, want) {
+		t.Fatalf("time for 10 km at 5:00/km = %q, want it to say %q", got, want)
 	}
 }
 
 func TestHandlePaceCmdCalculatesPace(t *testing.T) {
-	s := newService(calculator.NewService())
+	s := newService()
 
-	if got, want := messageText(t, s.handlePaceCmd(newCommandUpdate("/pace 10000 50m0s"))), "5m0s"; got != want {
-		t.Fatalf("pace for 10 km in 50:00 = %q, want %q", got, want)
+	if got, want := messageText(t, s.handlePaceCmd(newCommandUpdate("/pace 10000 50m0s"))), "10 km in 50:00 — that's 5:00 per kilometer"; !strings.Contains(got, want) {
+		t.Fatalf("pace for 10 km in 50:00 = %q, want it to say %q", got, want)
 	}
 }
 
 // A reply about the argument count names the two arguments the command wants,
 // so the sender does not have to guess their order from an abbreviation.
 func TestCommandsRejectWrongArgumentCount(t *testing.T) {
-	s := newService(calculator.NewService())
+	s := newService()
 
 	tests := []struct {
 		text string
@@ -415,7 +413,7 @@ func TestSenderDeliversEnqueuedMessage(t *testing.T) {
 		t.Fatalf("create bot client: %v", err)
 	}
 
-	s := newService(calculator.NewService())
+	s := newService()
 	s.bot = client
 	s.startDispatcher()
 	s.startSender()
@@ -428,8 +426,8 @@ func TestSenderDeliversEnqueuedMessage(t *testing.T) {
 
 	select {
 	case got := <-received:
-		if got.Text != "50m0s" {
-			t.Errorf("delivered text = %q, want %q", got.Text, "50m0s")
+		if !strings.Contains(got.Text, "10 km in 50:00") {
+			t.Errorf("delivered text = %q, want the plan for 10 km in 50:00", got.Text)
 		}
 		if got.ChatID != 42 {
 			t.Errorf("delivered chat_id = %d, want 42", got.ChatID)
@@ -477,7 +475,7 @@ func TestBuildWebhookURL(t *testing.T) {
 }
 
 func TestCloseIsIdempotent(t *testing.T) {
-	s := newService(calculator.NewService())
+	s := newService()
 	s.startDispatcher()
 
 	ctx := context.Background()

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL("./", import.meta.url));
-const checks = ["language.mjs", "offline.mjs", "validation.mjs", "saved-runs.mjs", "slider.mjs"];
+const checks = ["language.mjs", "offline.mjs", "validation.mjs", "saved-runs.mjs", "slider.mjs", "startapp.mjs"];
 
 const failed = [];
 for (const check of checks) {

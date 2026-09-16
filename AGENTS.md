@@ -6,7 +6,8 @@
   - `pkg/calculator/` — pure formulas with no I/O: pace and time, even splits, Riegel and Cameron predictions, Daniels VDOT and training paces.
   - `pkg/analysis/` — response shapes for splits, predictions and VDOT, shared by the HTTP API and the browser wasm so both return identical JSON.
   - `pkg/http/rest/` — HTTP API (`/api/v1/...`), health check, Telegram webhook, the static files and the page itself, whose link preview tags carry the plan from a shared link (`preview.go`).
-  - `pkg/telegram/` — bot commands on `github.com/go-telegram/bot`, with bounded queues and worker goroutines; a reply is a `textReply` or a `photoReply`, so `/card` answers with a picture.
+  - `pkg/telegram/` — the bot on `github.com/go-telegram/bot`, with bounded queues and worker goroutines. Plain text and `/pace`, `/time`, `/card` are read as plans; a plan reply carries inline buttons (splits, prediction, card, open in Pacer) whose taps edit the same message. A reply is a `textReply`, a `photoReply` or a `callbackReply`. `web_app` buttons go to private chats only; other chats get a plain link.
+  - `pkg/plan/` — reads a running plan written by hand (`марафон 3:30`, `10k 4:50`) and splits it into marks; whether a clock is hours or minutes, a finish or a pace is decided by which reading gives a running pace.
   - `pkg/miniapp/` — validation of Telegram Mini App init data.
   - `pkg/history/` — saved runs in SQLite (`modernc.org/sqlite`, no cgo).
   - `pkg/card/` — the plan drawn as a PNG for a chat, with the Go fonts; no font file lives in the repository.
@@ -24,7 +25,7 @@
 - `./build.sh` — rebuild both wasm artifacts: TinyGo for the browser, the standard toolchain for the server reactor; `WASM_COMPILER=go ./build.sh` builds the browser bundle with the standard toolchain. Run it after changing `cmd/wasm`, `cmd/calcwasm`, `pkg/calculator` or `pkg/analysis`, and commit the artifacts. The image does not rebuild them: it embeds the committed files, and CI fails when `./build.sh` leaves a diff.
 - `PORT=8080 TELEGRAM_TOKEN=... HOST=... DEBUG=true go run .` — run locally. The server contacts Telegram at startup, so it needs a real token; `DEBUG=true` deletes the bot's webhook, so use a separate test bot.
 - `python3 -m http.server 8080 -d assets` — serve only the page; the calculator runs entirely in the browser.
-- `node scripts/checks/all.mjs` — the page checks in headless Chrome: languages, offline and install, validation messages, saved runs, the distance slider. Needs Node 22+ and Chrome; `CHROME`, `ASSETS` and `CHECK_OUT` override the browser, the page directory and where screenshots are kept.
+- `node scripts/checks/all.mjs` — the page checks in headless Chrome: languages, offline and install, validation messages, saved runs, the distance slider, Telegram `startapp` links. Needs Node 22+ and Chrome; `CHROME`, `ASSETS` and `CHECK_OUT` override the browser, the page directory and where screenshots are kept.
 
 ## Coding Style & Naming Conventions
 - Use standard Go formatting (`gofmt`) and imports (`goimports` if available).
