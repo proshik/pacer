@@ -24,7 +24,7 @@
 - `./build.sh` — rebuild both wasm artifacts: TinyGo for the browser, the standard toolchain for the server reactor; `WASM_COMPILER=go ./build.sh` builds the browser bundle with the standard toolchain. Run it after changing `cmd/wasm`, `cmd/calcwasm`, `pkg/calculator` or `pkg/analysis`, and commit the artifacts. The image does not rebuild them: it embeds the committed files, and CI fails when `./build.sh` leaves a diff.
 - `PORT=8080 TELEGRAM_TOKEN=... HOST=... DEBUG=true go run .` — run locally. The server contacts Telegram at startup, so it needs a real token; `DEBUG=true` deletes the bot's webhook, so use a separate test bot.
 - `python3 -m http.server 8080 -d assets` — serve only the page; the calculator runs entirely in the browser.
-- `node scripts/checks/all.mjs` — the page checks in headless Chrome: languages, offline and install, validation messages, saved runs. Needs Node 22+ and Chrome; `CHROME`, `ASSETS` and `CHECK_OUT` override the browser, the page directory and where screenshots are kept.
+- `node scripts/checks/all.mjs` — the page checks in headless Chrome: languages, offline and install, validation messages, saved runs, the distance slider. Needs Node 22+ and Chrome; `CHROME`, `ASSETS` and `CHECK_OUT` override the browser, the page directory and where screenshots are kept.
 
 ## Coding Style & Naming Conventions
 - Use standard Go formatting (`gofmt`) and imports (`goimports` if available).

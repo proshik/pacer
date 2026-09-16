@@ -305,6 +305,34 @@
             box-shadow: 0 0 0 4px var(--mark);
         }
 
+        /* Отметка 50 км: здесь шкала слайдера переходит с точной на быструю. */
+        .track-wrap {
+            position: relative;
+        }
+
+        .track-knee {
+            position: absolute;
+            top: 30px;
+            left: calc(12px + (100% - 24px) * 2 / 3);
+            transform: translateX(-50%);
+            padding-top: 6px;
+            color: var(--ink-soft);
+            font-size: 0.6875rem;
+            line-height: 1;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .track-knee::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 1px;
+            height: 4px;
+            background: currentColor;
+        }
+
         .track:disabled {
             cursor: default;
             opacity: 0.5;
@@ -1340,12 +1368,45 @@
             return byId("slider");
         }
 
-        function updateSliderReadout(value) {
-            const slider = getSlider();
-            const share = (value - Number(slider.min)) / (Number(slider.max) - Number(slider.min)) * 100;
+        // Шкала слайдера: первые две трети дорожки — до 50 км с шагом 100 м,
+        // остальное — до 500 км с шагом 1 км. Там, где бегают чаще всего, палец
+        // попадает точно, а дальние дистанции набегают быстро. Слайдер хранит
+        // позицию (0…positions), метры из неё считают функции ниже.
+        const sliderScale = {positions: 1500, knee: 1000, kneeMeters: 50000, maxMeters: 500000, minMeters: 100};
 
-            byId("sliderReadout").textContent = formatKm(value);
-            slider.style.setProperty("--fill", clamp(share, 0, 100) + "%");
+        function positionToMeters(position) {
+            const {positions, knee, kneeMeters, maxMeters, minMeters} = sliderScale;
+            if (position <= knee) {
+                return Math.max(minMeters, Math.round(position / knee * kneeMeters / 100) * 100);
+            }
+
+            const meters = kneeMeters + (position - knee) / (positions - knee) * (maxMeters - kneeMeters);
+            return Math.round(meters / 1000) * 1000;
+        }
+
+        function metersToPosition(meters) {
+            const {positions, knee, kneeMeters, maxMeters} = sliderScale;
+            if (meters <= kneeMeters) {
+                return Math.max(0, meters) / kneeMeters * knee;
+            }
+
+            return Math.min(positions, knee + (meters - kneeMeters) / (maxMeters - kneeMeters) * (positions - knee));
+        }
+
+        // Шаг того участка, в сторону которого движемся: от 50 км вверх — 1 км, вниз — 100 м.
+        function sliderStep(meters, direction) {
+            const fast = direction > 0 ? meters >= sliderScale.kneeMeters : meters > sliderScale.kneeMeters;
+            return fast ? 1000 : 100;
+        }
+
+        function updateSliderReadout(meters) {
+            const slider = getSlider();
+            const text = formatKm(meters);
+
+            byId("sliderReadout").textContent = text;
+            // Экранный диктор называет километры, а не условную позицию ползунка.
+            slider.setAttribute("aria-valuetext", text);
+            slider.style.setProperty("--fill", metersToPosition(meters) / sliderScale.positions * 100 + "%");
         }
 
         // distInput -> слайдер
@@ -1354,7 +1415,7 @@
             const distValue = Number(byId("distInput").value);
 
             if (Number.isInteger(distValue) && distValue >= 0) {
-                slider.value = clamp(distValue, Number(slider.min), Number(slider.max));
+                slider.value = metersToPosition(distValue);
                 updateSliderReadout(distValue);
                 updatePresetHighlight(distValue);
                 return;
@@ -1365,15 +1426,16 @@
 
         // слайдер -> distInput
         function syncDistanceFromSlider() {
-            const sliderValue = Number(getSlider().value);
-            if (!Number.isFinite(sliderValue)) {
+            const position = Number(getSlider().value);
+            if (!Number.isFinite(position)) {
                 updatePresetHighlight(null);
                 return;
             }
 
-            byId("distInput").value = sliderValue;
-            updateSliderReadout(sliderValue);
-            updatePresetHighlight(sliderValue);
+            const meters = positionToMeters(position);
+            byId("distInput").value = meters;
+            updateSliderReadout(meters);
+            updatePresetHighlight(meters);
         }
 
         function updatePresetHighlight(distanceValue) {
@@ -1652,8 +1714,8 @@
             distButtonIDs.forEach((id) => {
                 const button = byId(id);
                 button.addEventListener("click", function () {
-                    getSlider().value = button.value;
-                    syncDistanceFromSlider();
+                    byId("distInput").value = button.value;
+                    syncDistanceToSlider();
                     pace();
                 });
             });
@@ -2131,7 +2193,8 @@
                 option.setAttribute("aria-pressed", String(option.dataset.lang === language));
             });
 
-            updateSliderReadout(Number(getSlider().value));
+            byId("sliderKnee").textContent = formatKm(sliderScale.kneeMeters);
+            updateSliderReadout(positionToMeters(Number(getSlider().value)));
             syncDistanceToSlider();
             renderPlan();
             renderGreeting();
@@ -2170,6 +2233,41 @@
                 pace();
             });
 
+            // Стрелки шагают на шаг своего участка, а не на условную позицию.
+            slider.addEventListener("keydown", (event) => {
+                const meters = Number(byId("distInput").value) || sliderScale.minMeters;
+                let next;
+                switch (event.key) {
+                    case "ArrowRight":
+                    case "ArrowUp":
+                        next = meters + sliderStep(meters, 1);
+                        break;
+                    case "ArrowLeft":
+                    case "ArrowDown":
+                        next = meters - sliderStep(meters, -1);
+                        break;
+                    case "PageUp":
+                        next = meters + 10 * sliderStep(meters, 1);
+                        break;
+                    case "PageDown":
+                        next = meters - 10 * sliderStep(meters, -1);
+                        break;
+                    case "Home":
+                        next = sliderScale.minMeters;
+                        break;
+                    case "End":
+                        next = sliderScale.maxMeters;
+                        break;
+                    default:
+                        return;
+                }
+
+                event.preventDefault();
+                byId("distInput").value = clamp(next, sliderScale.minMeters, sliderScale.maxMeters);
+                syncDistanceToSlider();
+                pace();
+            });
+
             applyStateFromURL();
             attachDistanceButtons();
             spinInputIDs.forEach(attachSpinInput);
@@ -2188,10 +2286,7 @@
             setInputsDisabled(true);
             tidySegments(spinInputIDs);
 
-            const initialDistance = Number(byId("distInput").value);
-            slider.value = initialDistance;
-            updateSliderReadout(initialDistance);
-            updatePresetHighlight(initialDistance);
+            syncDistanceToSlider();
 
             document.querySelector(".presets").addEventListener("scroll", updatePresetFades, {passive: true});
             window.addEventListener("resize", updatePresetFades);
@@ -2226,8 +2321,11 @@
             <p id="sliderReadout" class="distance-km">21,097 км</p>
         </div>
 
-        <input type="range" class="track" id="slider" min="0" max="200000" step="1" value="21097"
-               aria-labelledby="distance-title" aria-describedby="sliderReadout" disabled>
+        <div class="track-wrap">
+            <input type="range" class="track" id="slider" min="0" max="1500" step="any" value="844"
+                   aria-labelledby="distance-title" disabled>
+            <span id="sliderKnee" class="track-knee" aria-hidden="true">50&nbsp;км</span>
+        </div>
 
         <div class="presets" role="group" aria-label="Популярные дистанции" data-i18n-label="presets">
             <button type="button" id="b1km" value="1000" class="preset-btn" disabled>1 км</button>
