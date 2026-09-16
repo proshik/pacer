@@ -153,11 +153,33 @@
 
         /* ---------- шапка: план забега словами ---------- */
 
+        /*
+         * Логотип — иконка приложения и слово рядом, как на экране «Домой».
+         * Слово крупнее подзаголовка: при 16 px оно терялось рядом с планом и
+         * читалось как подпись, а не как название.
+         */
         .masthead-plan .wordmark {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
             margin: 0;
             color: var(--ink);
-            font: 800 1rem/1 var(--display);
-            letter-spacing: -0.01em;
+            font: 800 1.5rem/1 var(--display);
+            letter-spacing: -0.03em;
+        }
+
+        .wordmark-icon {
+            flex: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            /* Асфальт иконки почти сливается с тёмным фоном — край держит форму. */
+            .wordmark-icon {
+                box-shadow: 0 0 0 1px var(--line);
+            }
         }
 
         .masthead-top {
@@ -2330,7 +2352,7 @@
 <main class="shell">
     <header class="masthead masthead-plan">
         <div class="masthead-top">
-            <p class="wordmark">Pacer</p>
+            <p class="wordmark"><img class="wordmark-icon" src="icon.svg" alt="" width="32" height="32">Pacer</p>
             <div class="lang-switch" role="group" aria-label="Язык" data-i18n-label="language">
                 <button type="button" class="lang-option" data-lang="ru" lang="ru" title="Русский" aria-pressed="true">RU</button>
                 <button type="button" class="lang-option" data-lang="en" lang="en" title="English" aria-pressed="false">EN</button>
