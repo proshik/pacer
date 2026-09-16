@@ -1323,8 +1323,33 @@
             history.replaceState(null, "", location.pathname + "?" + params.toString() + location.hash);
         }
 
+        // Ссылка t.me/<бот>?startapp=d42195_t12600 приходит в tgWebAppStartParam:
+        // дистанция в метрах и время в секундах — двоеточие в startapp запрещено.
+        // Telegram кладёт параметр в адрес, а иногда только в хэш.
+        function startAppPlan() {
+            const raw = new URLSearchParams(location.search).get("tgWebAppStartParam")
+                || telegramLaunch.get("tgWebAppStartParam") || "";
+            const match = /^d(\d{1,7})_t(\d{1,7})$/.exec(raw);
+            if (!match) {
+                return null;
+            }
+
+            const distance = Number(match[1]);
+            const seconds = Number(match[2]);
+            if (distance <= 0 || distance > 1000000 || seconds <= 0) {
+                return null;
+            }
+
+            return {d: String(distance), t: String(seconds)};
+        }
+
         function applyStateFromURL() {
             const params = new URLSearchParams(location.search);
+            const started = !params.has("d") && !params.has("t") && startAppPlan();
+            if (started) {
+                params.set("d", started.d);
+                params.set("t", started.t);
+            }
 
             const distance = Number(params.get("d"));
             if (Number.isInteger(distance) && distance > 0) {
