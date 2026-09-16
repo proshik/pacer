@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.26-alpine AS builder
+# The builder runs on the build host's own platform and cross-compiles for the
+# target: the binary is pure Go (CGO_ENABLED=0), so no emulation is needed to
+# build an amd64 image on arm64 or the other way round.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 WORKDIR /app
 ARG TARGETOS
