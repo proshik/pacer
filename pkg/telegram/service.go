@@ -1,13 +1,11 @@
 package telegram
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,8 +13,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
-	"gorun/pkg/calculator"
-	"gorun/pkg/card"
+	"gorun/pkg/plan"
 )
 
 // Queue sizes. Enqueues are non blocking: when a queue is full the update is
@@ -28,16 +25,18 @@ const (
 )
 
 type Service struct {
-	bot        *bot.Bot
-	calculator calculator.Engine
+	bot     *bot.Bot
+	siteURL string
 
-	startC   chan *models.Update
-	timeC    chan *models.Update
-	paceC    chan *models.Update
-	cardC    chan *models.Update
-	unknownC chan *models.Update
-	messages chan outgoing
-	done     chan struct{}
+	startC    chan *models.Update
+	textC     chan *models.Update
+	timeC     chan *models.Update
+	paceC     chan *models.Update
+	cardC     chan *models.Update
+	unknownC  chan *models.Update
+	callbackC chan *models.Update
+	messages  chan outgoing
+	done      chan struct{}
 
 	polling       bool
 	cancelPolling context.CancelFunc
@@ -47,16 +46,17 @@ type Service struct {
 
 // newService builds the queues without touching the network, so tests can
 // exercise routing and handlers without a bot client.
-func newService(engine calculator.Engine) *Service {
+func newService() *Service {
 	return &Service{
-		calculator: engine,
-		startC:     make(chan *models.Update, updateQueueSize),
-		timeC:      make(chan *models.Update, updateQueueSize),
-		paceC:      make(chan *models.Update, updateQueueSize),
-		cardC:      make(chan *models.Update, updateQueueSize),
-		unknownC:   make(chan *models.Update, updateQueueSize),
-		messages:   make(chan outgoing, messageQueueSize),
-		done:       make(chan struct{}),
+		startC:    make(chan *models.Update, updateQueueSize),
+		textC:     make(chan *models.Update, updateQueueSize),
+		callbackC: make(chan *models.Update, updateQueueSize),
+		timeC:     make(chan *models.Update, updateQueueSize),
+		paceC:     make(chan *models.Update, updateQueueSize),
+		cardC:     make(chan *models.Update, updateQueueSize),
+		unknownC:  make(chan *models.Update, updateQueueSize),
+		messages:  make(chan outgoing, messageQueueSize),
+		done:      make(chan struct{}),
 	}
 }
 
@@ -64,8 +64,9 @@ func newService(engine calculator.Engine) *Service {
 //
 // In debug mode any webhook is removed and updates are long polled; otherwise
 // a webhook pointing at host is registered.
-func NewService(ctx context.Context, debugMode bool, host string, token string, engine calculator.Engine) (*Service, error) {
-	s := newService(engine)
+func NewService(ctx context.Context, debugMode bool, host string, token string) (*Service, error) {
+	s := newService()
+	s.siteURL = webAppSite(host)
 
 	client, err := bot.New(token, bot.WithDefaultHandler(
 		func(_ context.Context, _ *bot.Bot, update *models.Update) {
@@ -179,7 +180,16 @@ func parseCommand(message *models.Message) (command string, arguments string) {
 }
 
 func (s *Service) handleUpdate(update *models.Update) {
-	if update == nil || update.Message == nil {
+	if update == nil {
+		return
+	}
+
+	if update.CallbackQuery != nil {
+		s.enqueueUpdate(s.callbackC, "callback", update)
+		return
+	}
+
+	if update.Message == nil {
 		slog.Debug("telegram update ignored: message is nil")
 		return
 	}
@@ -187,7 +197,7 @@ func (s *Service) handleUpdate(update *models.Update) {
 	command, _ := parseCommand(update.Message)
 	switch command {
 	case "":
-		s.enqueueUpdate(s.startC, "message", update)
+		s.enqueueUpdate(s.textC, "message", update)
 	case "start":
 		s.enqueueUpdate(s.startC, command, update)
 	case "time":
@@ -231,7 +241,11 @@ func (s *Service) startDispatcher() {
 			case <-s.done:
 				return
 			case u := <-s.startC:
-				s.enqueueMessage(handleStartCmd(u))
+				s.enqueueMessage(s.handleStartCmd(u))
+			case u := <-s.textC:
+				s.enqueueMessage(s.handleText(u))
+			case u := <-s.callbackC:
+				s.enqueueMessage(s.handleCallback(u))
 			case u := <-s.timeC:
 				s.enqueueMessage(s.handleTimeCmd(u))
 			case u := <-s.paceC:
@@ -299,7 +313,8 @@ func buildWebhookURL(host, token string) (string, error) {
 	return webhookURL.String(), nil
 }
 
-// outgoing is a reply on its way to Telegram: words or a picture. The sender
+// outgoing is a reply on its way to Telegram: words, a picture, or the answer
+// to a button. The sender
 // goroutine does not care which.
 type outgoing interface {
 	send(ctx context.Context, client *bot.Bot) error
@@ -325,8 +340,16 @@ func (r photoReply) send(ctx context.Context, client *bot.Bot) error {
 	return err
 }
 
-func handleStartCmd(update *models.Update) outgoing {
-	return buildMsg(update, textsFor(update.Message).greeting)
+// handleStartCmd greets with examples and a button that opens the app.
+func (s *Service) handleStartCmd(update *models.Update) outgoing {
+	t := textsFor(update.Message)
+	params := &bot.SendMessageParams{ChatID: update.Message.Chat.ID, Text: t.greeting}
+
+	if open, ok := s.siteButton(update.Message.Chat, t.openApp, "/"); ok {
+		params.ReplyMarkup = models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{open}}}
+	}
+
+	return textReply{params: params}
 }
 
 func handleUnknownCmd(update *models.Update) outgoing {
@@ -335,54 +358,18 @@ func handleUnknownCmd(update *models.Update) outgoing {
 	return buildMsg(update, fmt.Sprintf(textsFor(update.Message).unknownCommand, command))
 }
 
+// handleTimeCmd reads its clock as a pace: /time 4:50 10k.
 func (s *Service) handleTimeCmd(update *models.Update) outgoing {
 	t := textsFor(update.Message)
 
-	arguments := extractArguments(update)
-	if len(arguments) == 0 {
-		return buildMsg(update, t.emptyArguments)
-	}
-
-	if len(arguments) != 2 {
-		return buildMsg(update, t.timeArgCount)
-	}
-
-	paceDuration, err := time.ParseDuration(arguments[0])
-	if err != nil {
-		return buildMsg(update, t.invalidPace+arguments[0])
-	}
-
-	dist, err := strconv.Atoi(arguments[1])
-	if err != nil {
-		return buildMsg(update, t.invalidDist+arguments[1])
-	}
-
-	return buildMsg(update, s.calculator.Time(dist, paceDuration).String())
+	return s.planCommand(update, plan.Pace, t.usageTime, t)
 }
 
+// handlePaceCmd reads its clock as a finish time: /pace 21.1 1:38:48.
 func (s *Service) handlePaceCmd(update *models.Update) outgoing {
 	t := textsFor(update.Message)
 
-	arguments := extractArguments(update)
-	if len(arguments) == 0 {
-		return buildMsg(update, t.emptyArguments)
-	}
-
-	if len(arguments) != 2 {
-		return buildMsg(update, t.paceArgCount)
-	}
-
-	dist, err := strconv.Atoi(arguments[0])
-	if err != nil {
-		return buildMsg(update, t.invalidDist+arguments[0])
-	}
-
-	timeDuration, err := time.ParseDuration(arguments[1])
-	if err != nil {
-		return buildMsg(update, t.invalidTime+arguments[1])
-	}
-
-	return buildMsg(update, s.calculator.Pace(dist, timeDuration).String())
+	return s.planCommand(update, plan.FinishTime, t.usagePace, t)
 }
 
 // handleCardCmd draws the plan as a picture, which forwards into a chat as one
@@ -390,43 +377,22 @@ func (s *Service) handlePaceCmd(update *models.Update) outgoing {
 func (s *Service) handleCardCmd(update *models.Update) outgoing {
 	t := textsFor(update.Message)
 
-	arguments := extractArguments(update)
-	if len(arguments) == 0 {
-		return buildMsg(update, t.emptyArguments)
+	_, arguments := parseCommand(update.Message)
+	if strings.TrimSpace(arguments) == "" {
+		return buildMsg(update, t.emptyArguments+"\n"+t.usageCard)
 	}
 
-	if len(arguments) != 2 {
-		return buildMsg(update, t.paceArgCount)
-	}
-
-	dist, err := strconv.Atoi(arguments[0])
+	p, err := plan.ParseAs(arguments, plan.FinishTime)
 	if err != nil {
-		return buildMsg(update, t.invalidDist+arguments[0])
+		return buildMsg(update, t.problem(err, plan.FinishTime, plan.Unrecognized(arguments), t.usageCard))
 	}
 
-	raceTime, err := time.ParseDuration(arguments[1])
-	if err != nil {
-		return buildMsg(update, t.invalidTime+arguments[1])
-	}
-
-	plan := card.Plan{Distance: dist, Time: raceTime, Language: t.language}
-	picture, err := card.Render(plan)
-	if err != nil {
-		slog.Warn("draw card failed", "err", err, "dist", dist, "time", raceTime)
+	photo, ok := s.cardPhoto(update.Message.Chat.ID, p, t)
+	if !ok {
 		return buildMsg(update, t.cardFailed)
 	}
 
-	return photoReply{params: &bot.SendPhotoParams{
-		ChatID:  update.Message.Chat.ID,
-		Photo:   &models.InputFileUpload{Filename: "pacer.png", Data: bytes.NewReader(picture)},
-		Caption: card.Caption(plan),
-	}}
-}
-
-func extractArguments(update *models.Update) []string {
-	_, arguments := parseCommand(update.Message)
-
-	return strings.Fields(arguments)
+	return photoReply{params: photo}
 }
 
 func buildMsg(update *models.Update, text string) outgoing {
