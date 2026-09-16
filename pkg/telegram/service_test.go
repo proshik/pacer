@@ -43,14 +43,21 @@ func newPlainUpdate(text string) *models.Update {
 	}
 }
 
-func messageText(t *testing.T, params *bot.SendMessageParams) string {
+// messageText reads the words out of a reply and fails when the reply turns
+// out to be something else, such as a picture.
+func messageText(t *testing.T, reply outgoing) string {
 	t.Helper()
 
-	if params == nil {
-		t.Fatal("expected outgoing message, got nil")
+	if reply == nil {
+		t.Fatal("expected an outgoing reply, got nil")
 	}
 
-	return params.Text
+	text, ok := reply.(textReply)
+	if !ok {
+		t.Fatalf("expected a text reply, got %T", reply)
+	}
+
+	return text.params.Text
 }
 
 // newTestService wires channels and the dispatcher without a bot client;
@@ -69,7 +76,7 @@ func newTestService(t *testing.T) *Service {
 	return s
 }
 
-func receiveMessage(t *testing.T, s *Service) *bot.SendMessageParams {
+func receiveMessage(t *testing.T, s *Service) outgoing {
 	t.Helper()
 
 	select {
@@ -353,8 +360,8 @@ func TestUpdateWithoutMessageIsIgnored(t *testing.T) {
 	s.handleUpdate(&models.Update{})
 
 	select {
-	case msg := <-s.messages:
-		t.Fatalf("expected no reply, got %q", msg.Text)
+	case reply := <-s.messages:
+		t.Fatalf("expected no reply, got %T", reply)
 	case <-time.After(200 * time.Millisecond):
 	}
 }

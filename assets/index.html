@@ -124,6 +124,17 @@
             max-width: 34em;
         }
 
+        /*
+         * Две строки заранее: перевод бывает длиннее или короче, и без этого
+         * абзац то в одну строку, то в две — страница прыгает при смене языка.
+         * Только подзаголовок и сноски: слово Pacer — тоже абзац в шапке, и
+         * лишняя высота опустила бы переключатель языка ниже этого слова.
+         */
+        #lede,
+        .section-note {
+            min-height: 2lh;
+        }
+
         .caveat {
             margin-top: 12px;
         }
@@ -157,30 +168,52 @@
         }
 
         /*
-         * Переключатель языка — тихая кнопка с названием другого языка. Тач-цель
-         * 44 px, но отрицательные поля не дают ей раздвинуть строку со словом Pacer.
+         * Переключатель языка — пара RU | EN. Выбранный язык залит цветом текста,
+         * как основная кнопка: жёлтым на странице отмечена выбранная дистанция.
+         * Отрицательные поля не дают таблетке раздвинуть строку со словом Pacer,
+         * а ::before добирает высоту касания до 44 px.
          */
         .lang-switch {
-            min-height: 44px;
-            margin-block: -14px;
-            margin-inline-end: -10px;
+            display: inline-flex;
+            margin-block: -6px;
+            padding: 2px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+        }
+
+        .lang-option {
+            position: relative;
+            min-width: 40px;
+            height: 24px;
             padding: 0 10px;
             border: 0;
-            border-radius: 8px;
+            border-radius: 999px;
             background: transparent;
             color: var(--ink-soft);
-            font: 600 0.9375rem/1 var(--text);
+            font: 700 0.75rem/1 var(--text);
+            letter-spacing: 0.04em;
             cursor: pointer;
         }
 
-        .lang-switch:hover {
-            background: var(--line-soft);
+        .lang-option::before {
+            content: "";
+            position: absolute;
+            inset: -10px 0;
+        }
+
+        .lang-option:hover {
             color: var(--ink);
         }
 
-        .lang-switch:focus-visible {
+        .lang-option[aria-pressed="true"] {
+            background: var(--ink);
+            color: var(--paper);
+            cursor: default;
+        }
+
+        .lang-option:focus-visible {
             outline: 3px solid var(--focus);
-            outline-offset: -3px;
+            outline-offset: 1px;
         }
 
         .masthead-plan .plan-line {
@@ -270,6 +303,34 @@
 
         .track:focus-visible::-moz-range-thumb {
             box-shadow: 0 0 0 4px var(--mark);
+        }
+
+        /* Отметка 50 км: здесь шкала слайдера переходит с точной на быструю. */
+        .track-wrap {
+            position: relative;
+        }
+
+        .track-knee {
+            position: absolute;
+            top: 30px;
+            left: calc(12px + (100% - 24px) * 2 / 3);
+            transform: translateX(-50%);
+            padding-top: 6px;
+            color: var(--ink-soft);
+            font-size: 0.6875rem;
+            line-height: 1;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .track-knee::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 1px;
+            height: 4px;
+            background: currentColor;
         }
 
         .track:disabled {
@@ -742,11 +803,27 @@
 
         /* ---------- ссылка ---------- */
 
+        /*
+         * Порядок не должен зависеть от длины подписей: подпись всегда на своей
+         * строке, а на телефоне кнопки идут в столбик — иначе русские ярлыки
+         * переносятся, а английские нет.
+         */
         .share {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(2, max-content);
+            justify-content: start;
             align-items: center;
             gap: 12px 16px;
+        }
+
+        .share-note {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 560px) {
+            .share {
+                grid-template-columns: minmax(0, 1fr);
+            }
         }
 
         .share-btn {
@@ -834,6 +911,7 @@
         const messages = {
             ru: {
                 description: "Беговой калькулятор: время и темп на любой дистанции, раскладка по километрам, прогноз результата и VDOT.",
+                language: "Язык",
                 lede: "Задайте дистанцию и время или темп — второе посчитается само.",
                 greeting: (name) => `${name}, задайте дистанцию и время или темп — второе посчитается само.`,
                 planLead: (distance, time) => `${distance} за ${time}`,
@@ -918,6 +996,7 @@
             },
             en: {
                 description: "Running calculator: time and pace for any distance, kilometer splits, a race prediction and VDOT.",
+                language: "Language",
                 lede: "Set the distance and either the time or the pace — the other one is calculated.",
                 greeting: (name) => `${name}, set the distance and either the time or the pace — the other one is calculated.`,
                 planLead: (distance, time) => `${distance} in ${time}`,
@@ -1003,8 +1082,6 @@
         };
 
         const locales = {ru: "ru-RU", en: "en-US"};
-        // Название языка на нём самом — так его и пишут на кнопке переключения.
-        const languageNames = {ru: "Русский", en: "English"};
         const languageStorageKey = "pacer.lang";
 
         function storedLanguage() {
@@ -1101,7 +1178,7 @@
 
         // Переключатель языка работает и до загрузки калькулятора.
         function setInputsDisabled(disabled) {
-            document.querySelectorAll("input, button:not(#langSwitch)").forEach((element) => {
+            document.querySelectorAll("input, button:not(.lang-option)").forEach((element) => {
                 element.disabled = disabled;
             });
         }
@@ -1291,12 +1368,45 @@
             return byId("slider");
         }
 
-        function updateSliderReadout(value) {
-            const slider = getSlider();
-            const share = (value - Number(slider.min)) / (Number(slider.max) - Number(slider.min)) * 100;
+        // Шкала слайдера: первые две трети дорожки — до 50 км с шагом 100 м,
+        // остальное — до 500 км с шагом 1 км. Там, где бегают чаще всего, палец
+        // попадает точно, а дальние дистанции набегают быстро. Слайдер хранит
+        // позицию (0…positions), метры из неё считают функции ниже.
+        const sliderScale = {positions: 1500, knee: 1000, kneeMeters: 50000, maxMeters: 500000, minMeters: 100};
 
-            byId("sliderReadout").textContent = formatKm(value);
-            slider.style.setProperty("--fill", clamp(share, 0, 100) + "%");
+        function positionToMeters(position) {
+            const {positions, knee, kneeMeters, maxMeters, minMeters} = sliderScale;
+            if (position <= knee) {
+                return Math.max(minMeters, Math.round(position / knee * kneeMeters / 100) * 100);
+            }
+
+            const meters = kneeMeters + (position - knee) / (positions - knee) * (maxMeters - kneeMeters);
+            return Math.round(meters / 1000) * 1000;
+        }
+
+        function metersToPosition(meters) {
+            const {positions, knee, kneeMeters, maxMeters} = sliderScale;
+            if (meters <= kneeMeters) {
+                return Math.max(0, meters) / kneeMeters * knee;
+            }
+
+            return Math.min(positions, knee + (meters - kneeMeters) / (maxMeters - kneeMeters) * (positions - knee));
+        }
+
+        // Шаг того участка, в сторону которого движемся: от 50 км вверх — 1 км, вниз — 100 м.
+        function sliderStep(meters, direction) {
+            const fast = direction > 0 ? meters >= sliderScale.kneeMeters : meters > sliderScale.kneeMeters;
+            return fast ? 1000 : 100;
+        }
+
+        function updateSliderReadout(meters) {
+            const slider = getSlider();
+            const text = formatKm(meters);
+
+            byId("sliderReadout").textContent = text;
+            // Экранный диктор называет километры, а не условную позицию ползунка.
+            slider.setAttribute("aria-valuetext", text);
+            slider.style.setProperty("--fill", metersToPosition(meters) / sliderScale.positions * 100 + "%");
         }
 
         // distInput -> слайдер
@@ -1305,7 +1415,7 @@
             const distValue = Number(byId("distInput").value);
 
             if (Number.isInteger(distValue) && distValue >= 0) {
-                slider.value = clamp(distValue, Number(slider.min), Number(slider.max));
+                slider.value = metersToPosition(distValue);
                 updateSliderReadout(distValue);
                 updatePresetHighlight(distValue);
                 return;
@@ -1316,15 +1426,16 @@
 
         // слайдер -> distInput
         function syncDistanceFromSlider() {
-            const sliderValue = Number(getSlider().value);
-            if (!Number.isFinite(sliderValue)) {
+            const position = Number(getSlider().value);
+            if (!Number.isFinite(position)) {
                 updatePresetHighlight(null);
                 return;
             }
 
-            byId("distInput").value = sliderValue;
-            updateSliderReadout(sliderValue);
-            updatePresetHighlight(sliderValue);
+            const meters = positionToMeters(position);
+            byId("distInput").value = meters;
+            updateSliderReadout(meters);
+            updatePresetHighlight(meters);
         }
 
         function updatePresetHighlight(distanceValue) {
@@ -1603,8 +1714,8 @@
             distButtonIDs.forEach((id) => {
                 const button = byId(id);
                 button.addEventListener("click", function () {
-                    getSlider().value = button.value;
-                    syncDistanceFromSlider();
+                    byId("distInput").value = button.value;
+                    syncDistanceToSlider();
                     pace();
                 });
             });
@@ -2078,14 +2189,12 @@
                 button.textContent = presetName(Number(button.value));
             });
 
-            // Кнопка предлагает другой язык и называет его на нём самом.
-            const other = language === "ru" ? "en" : "ru";
-            const switcher = byId("langSwitch");
-            switcher.dataset.lang = other;
-            switcher.lang = other;
-            switcher.textContent = languageNames[other];
+            document.querySelectorAll(".lang-option").forEach((option) => {
+                option.setAttribute("aria-pressed", String(option.dataset.lang === language));
+            });
 
-            updateSliderReadout(Number(getSlider().value));
+            byId("sliderKnee").textContent = formatKm(sliderScale.kneeMeters);
+            updateSliderReadout(positionToMeters(Number(getSlider().value)));
             syncDistanceToSlider();
             renderPlan();
             renderGreeting();
@@ -2099,14 +2208,20 @@
         }
 
         function attachLanguageSwitch() {
-            byId("langSwitch").addEventListener("click", function () {
-                language = this.dataset.lang;
-                try {
-                    localStorage.setItem(languageStorageKey, language);
-                } catch (error) {
-                    // Без хранилища (приватный режим) выбор действует до перезагрузки.
-                }
-                applyLanguage();
+            document.querySelectorAll(".lang-option").forEach((option) => {
+                option.addEventListener("click", () => {
+                    if (option.dataset.lang === language) {
+                        return;
+                    }
+
+                    language = option.dataset.lang;
+                    try {
+                        localStorage.setItem(languageStorageKey, language);
+                    } catch (error) {
+                        // Без хранилища (приватный режим) выбор действует до перезагрузки.
+                    }
+                    applyLanguage();
+                });
             });
         }
 
@@ -2115,6 +2230,41 @@
 
             slider.addEventListener("input", function () {
                 syncDistanceFromSlider();
+                pace();
+            });
+
+            // Стрелки шагают на шаг своего участка, а не на условную позицию.
+            slider.addEventListener("keydown", (event) => {
+                const meters = Number(byId("distInput").value) || sliderScale.minMeters;
+                let next;
+                switch (event.key) {
+                    case "ArrowRight":
+                    case "ArrowUp":
+                        next = meters + sliderStep(meters, 1);
+                        break;
+                    case "ArrowLeft":
+                    case "ArrowDown":
+                        next = meters - sliderStep(meters, -1);
+                        break;
+                    case "PageUp":
+                        next = meters + 10 * sliderStep(meters, 1);
+                        break;
+                    case "PageDown":
+                        next = meters - 10 * sliderStep(meters, -1);
+                        break;
+                    case "Home":
+                        next = sliderScale.minMeters;
+                        break;
+                    case "End":
+                        next = sliderScale.maxMeters;
+                        break;
+                    default:
+                        return;
+                }
+
+                event.preventDefault();
+                byId("distInput").value = clamp(next, sliderScale.minMeters, sliderScale.maxMeters);
+                syncDistanceToSlider();
                 pace();
             });
 
@@ -2136,10 +2286,7 @@
             setInputsDisabled(true);
             tidySegments(spinInputIDs);
 
-            const initialDistance = Number(byId("distInput").value);
-            slider.value = initialDistance;
-            updateSliderReadout(initialDistance);
-            updatePresetHighlight(initialDistance);
+            syncDistanceToSlider();
 
             document.querySelector(".presets").addEventListener("scroll", updatePresetFades, {passive: true});
             window.addEventListener("resize", updatePresetFades);
@@ -2159,7 +2306,10 @@
     <header class="masthead masthead-plan">
         <div class="masthead-top">
             <p class="wordmark">Pacer</p>
-            <button type="button" id="langSwitch" class="lang-switch" data-lang="en" lang="en">English</button>
+            <div class="lang-switch" role="group" aria-label="Язык" data-i18n-label="language">
+                <button type="button" class="lang-option" data-lang="ru" lang="ru" title="Русский" aria-pressed="true">RU</button>
+                <button type="button" class="lang-option" data-lang="en" lang="en" title="English" aria-pressed="false">EN</button>
+            </div>
         </div>
         <h1 id="planLine" class="plan-line">Полумарафон за 1:25:39</h1>
         <p id="lede" data-i18n="lede">Задайте дистанцию и время или темп — второе посчитается само.</p>
@@ -2171,8 +2321,11 @@
             <p id="sliderReadout" class="distance-km">21,097 км</p>
         </div>
 
-        <input type="range" class="track" id="slider" min="0" max="200000" step="1" value="21097"
-               aria-labelledby="distance-title" aria-describedby="sliderReadout" disabled>
+        <div class="track-wrap">
+            <input type="range" class="track" id="slider" min="0" max="1500" step="any" value="844"
+                   aria-labelledby="distance-title" disabled>
+            <span id="sliderKnee" class="track-knee" aria-hidden="true">50&nbsp;км</span>
+        </div>
 
         <div class="presets" role="group" aria-label="Популярные дистанции" data-i18n-label="presets">
             <button type="button" id="b1km" value="1000" class="preset-btn" disabled>1 км</button>

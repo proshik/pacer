@@ -12,6 +12,7 @@ import (
 // texts holds every reply that carries words. Results themselves are Go
 // durations ("50m0s") and read the same in either language.
 type texts struct {
+	language       string // the card is drawn in the same language
 	greeting       string
 	unknownCommand string // %s is the command without its slash
 	emptyArguments string
@@ -20,45 +21,55 @@ type texts struct {
 	invalidPace    string // each invalid* is followed by the offending argument
 	invalidDist    string
 	invalidTime    string
+	cardFailed     string
 
 	// descriptions in the command menu next to the input box
 	startCommand string
 	timeCommand  string
 	paceCommand  string
+	cardCommand  string
 }
 
 var englishTexts = texts{
+	language: "en",
 	greeting: "Running pace calculator\n" +
 		"Send one of these commands:\n\n" +
 		"/time — time from pace, for example /time 4m50s 21095: the pace first, then the distance in meters\n" +
-		"/pace — pace from time, for example /pace 21097 1h38m48s: the distance in meters first, then the time\n",
-	unknownCommand: "Unknown command: /%s\n\nAvailable commands: /start, /time, /pace",
+		"/pace — pace from time, for example /pace 21097 1h38m48s: the distance in meters first, then the time\n" +
+		"/card — the plan as a picture, for example /card 21097 1h38m48s: the distance, then the time\n",
+	unknownCommand: "Unknown command: /%s\n\nAvailable commands: /start, /time, /pace, /card",
 	emptyArguments: "This command needs arguments — /start has examples",
 	timeArgCount:   "Two arguments separated by a space: the pace and the distance",
 	paceArgCount:   "Two arguments separated by a space: the distance and the time",
 	invalidPace:    "Couldn't read the pace, 4m50s is an example: ",
 	invalidDist:    "The distance is a whole number of meters, 21095 for example: ",
 	invalidTime:    "Couldn't read the time, 1h38m48s is an example: ",
+	cardFailed:     "Couldn't draw the card",
 	startCommand:   "How to use the bot",
 	timeCommand:    "Time from pace and distance",
 	paceCommand:    "Pace from distance and time",
+	cardCommand:    "The plan as a picture",
 }
 
 var russianTexts = texts{
+	language: "ru",
 	greeting: "Беговой калькулятор темпа\n" +
 		"Отправьте одну из команд:\n\n" +
 		"/time — время по темпу, например /time 4m50s 21095: сначала темп, потом дистанция в метрах\n" +
-		"/pace — темп по времени, например /pace 21097 1h38m48s: сначала дистанция в метрах, потом время\n",
-	unknownCommand: "Неизвестная команда: /%s\n\nДоступные команды: /start, /time, /pace",
+		"/pace — темп по времени, например /pace 21097 1h38m48s: сначала дистанция в метрах, потом время\n" +
+		"/card — карточка плана картинкой, например /card 21097 1h38m48s: сначала дистанция, потом время\n",
+	unknownCommand: "Неизвестная команда: /%s\n\nДоступные команды: /start, /time, /pace, /card",
 	emptyArguments: "Команде нужны аргументы — примеры в /start",
 	timeArgCount:   "Нужно два аргумента через пробел: темп и дистанция",
 	paceArgCount:   "Нужно два аргумента через пробел: дистанция и время",
 	invalidPace:    "Не получилось разобрать темп, пример — 4m50s: ",
 	invalidDist:    "Дистанция — целое число метров, например 21095: ",
 	invalidTime:    "Не получилось разобрать время, пример — 1h38m48s: ",
+	cardFailed:     "Не получилось нарисовать карточку",
 	startCommand:   "Как пользоваться",
 	timeCommand:    "Время по темпу и дистанции",
 	paceCommand:    "Темп по дистанции и времени",
+	cardCommand:    "Карточка плана картинкой",
 }
 
 // publishCommands fills the command menu Telegram shows next to the input box.
@@ -80,6 +91,7 @@ func publishCommands(ctx context.Context, client *bot.Bot) error {
 				{Command: "start", Description: menu.texts.startCommand},
 				{Command: "time", Description: menu.texts.timeCommand},
 				{Command: "pace", Description: menu.texts.paceCommand},
+				{Command: "card", Description: menu.texts.cardCommand},
 			},
 		})
 		if err != nil {

@@ -6,9 +6,10 @@
   - `pkg/calculator/` — pure formulas with no I/O: pace and time, even splits, Riegel and Cameron predictions, Daniels VDOT and training paces.
   - `pkg/analysis/` — response shapes for splits, predictions and VDOT, shared by the HTTP API and the browser wasm so both return identical JSON.
   - `pkg/http/rest/` — HTTP API (`/api/v1/...`), health check, Telegram webhook, the static files and the page itself, whose link preview tags carry the plan from a shared link (`preview.go`).
-  - `pkg/telegram/` — bot commands on `github.com/go-telegram/bot`, with bounded queues and worker goroutines.
+  - `pkg/telegram/` — bot commands on `github.com/go-telegram/bot`, with bounded queues and worker goroutines; a reply is a `textReply` or a `photoReply`, so `/card` answers with a picture.
   - `pkg/miniapp/` — validation of Telegram Mini App init data.
   - `pkg/history/` — saved runs in SQLite (`modernc.org/sqlite`, no cgo).
+  - `pkg/card/` — the plan drawn as a PNG for a chat, with the Go fonts; no font file lives in the repository.
   - `pkg/wasmcalc/` — runs `calc.wasm` on the server through wazero when `CALC_ENGINE=wasm`.
 - `cmd/wasm/` — browser bundle (`js && wasm`), built with TinyGo into `assets/json.wasm`.
 - `cmd/calcwasm/` — server WASI reactor (`wasip1`, `go:wasmexport`), built into `pkg/wasmcalc/calc.wasm`.
@@ -23,6 +24,7 @@
 - `./build.sh` — rebuild both wasm artifacts: TinyGo for the browser, the standard toolchain for the server reactor; `WASM_COMPILER=go ./build.sh` builds the browser bundle with the standard toolchain. Run it after changing `cmd/wasm`, `cmd/calcwasm`, `pkg/calculator` or `pkg/analysis`, and commit the artifacts. The image does not rebuild them: it embeds the committed files, and CI fails when `./build.sh` leaves a diff.
 - `PORT=8080 TELEGRAM_TOKEN=... HOST=... DEBUG=true go run .` — run locally. The server contacts Telegram at startup, so it needs a real token; `DEBUG=true` deletes the bot's webhook, so use a separate test bot.
 - `python3 -m http.server 8080 -d assets` — serve only the page; the calculator runs entirely in the browser.
+- `node scripts/checks/all.mjs` — the page checks in headless Chrome: languages, offline and install, validation messages, saved runs, the distance slider. Needs Node 22+ and Chrome; `CHROME`, `ASSETS` and `CHECK_OUT` override the browser, the page directory and where screenshots are kept.
 
 ## Coding Style & Naming Conventions
 - Use standard Go formatting (`gofmt`) and imports (`goimports` if available).
@@ -38,7 +40,7 @@
 - Write the failing test first, then the code.
 - Check formulas against published reference values, not against the implementation itself: the VDOT tests use Daniels' table, the Mini App tests use Telegram's published init data example.
 - Test HTTP handlers through `httptest`. The Telegram client can be tested without a token via `bot.WithSkipGetMe()` and `bot.WithServerURL()`; note that it sends `multipart/form-data`, not JSON.
-- For page changes, check a browser at 390 px width, in both colour schemes and in both languages.
+- For page changes, run `node scripts/checks/all.mjs` and add a check there for the behaviour you changed; it covers 390 px, both colour schemes, both languages and offline.
 - `assets_test.go` serves every file `index.html` links through the real handler and checks its `Content-Type`; list a newly linked file there. A file the page needs offline also goes into `SHELL` in `assets/sw.js`.
 - CI does not run on branch pushes, so build the image locally with `docker build .` before a pull request. The browser wasm exports can be called under Node through `assets/wasm_exec.js`.
 - Run tests, lint and `./build.sh` before opening a pull request.

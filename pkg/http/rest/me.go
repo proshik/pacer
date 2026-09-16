@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -45,6 +46,10 @@ func authenticate(w http.ResponseWriter, r *http.Request, botToken string) (mini
 	data, err := miniapp.ValidateInitData(raw, botToken, initDataMaxAge, time.Now())
 	switch {
 	case err == nil:
+		// What a live launch settles and a test cannot: which language the
+		// client reports and whether it sends the signature field.
+		values, _ := url.ParseQuery(raw)
+		slog.Debug("mini app sign-in", "language_code", data.User.LanguageCode, "signature", values.Has("signature"))
 		return data, true
 	case errors.Is(err, miniapp.ErrExpired):
 		// Genuine but old: reopening the app makes Telegram sign fresh data.
