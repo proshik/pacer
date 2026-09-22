@@ -43,7 +43,7 @@
 - Test HTTP handlers through `httptest`. The Telegram client can be tested without a token via `bot.WithSkipGetMe()` and `bot.WithServerURL()`; note that it sends `multipart/form-data`, not JSON.
 - For page changes, run `node scripts/checks/all.mjs` and add a check there for the behaviour you changed; it covers 390 px, both colour schemes, both languages and offline.
 - `assets_test.go` serves every file `index.html` links through the real handler and checks its `Content-Type`; list a newly linked file there. A file the page needs offline also goes into `SHELL` in `assets/sw.js`.
-- CI does not run on branch pushes, so build the image locally with `docker build .` before a pull request. The browser wasm exports can be called under Node through `assets/wasm_exec.js`.
+- CI runs on pull requests and pushes to `master`, not on other branch pushes, so build the image locally with `docker build .` before a pull request. Releases are cut by hand from `master` with the `release` workflow (choose patch, minor or major); it publishes the image, pushes the tag and opens a draft release to edit. The browser wasm exports can be called under Node through `assets/wasm_exec.js`.
 - Run tests, lint and `./build.sh` before opening a pull request.
 
 ## Commit & Pull Request Guidelines

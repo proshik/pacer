@@ -2,6 +2,8 @@ name: ci
 
 on:
   workflow_dispatch:
+  # release.yml runs the same checks before it publishes anything.
+  workflow_call:
   pull_request:
   push:
     branches:
