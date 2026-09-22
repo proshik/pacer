@@ -1,69 +1,474 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
-- `main.go` is the entry point: environment configuration, the calculation engine, the optional history database, the Telegram service, the HTTP server and graceful shutdown. Keep it focused on wiring.
-- `pkg/` contains the modules:
-  - `pkg/calculator/` — pure formulas with no I/O: pace and time, even splits, Riegel and Cameron predictions, Daniels VDOT and training paces.
-  - `pkg/analysis/` — response shapes for splits, predictions and VDOT, shared by the HTTP API and the browser wasm so both return identical JSON.
-  - `pkg/http/rest/` — HTTP API (`/api/v1/...`), health check, Telegram webhook, the static files and the page itself, whose link preview tags carry the plan from a shared link (`preview.go`).
-  - `pkg/telegram/` — the bot on `github.com/go-telegram/bot`, with bounded queues and worker goroutines. Plain text and `/pace`, `/time`, `/card` are read as plans; a plan reply carries inline buttons (splits, prediction, card, open in Pacer) whose taps edit the same message. A reply is a `textReply`, a `photoReply` or a `callbackReply`. `web_app` buttons go to private chats only; other chats get a plain link.
-  - `pkg/plan/` — reads a running plan written by hand (`марафон 3:30`, `10k 4:50`) and splits it into marks; whether a clock is hours or minutes, a finish or a pace is decided by which reading gives a running pace.
-  - `pkg/miniapp/` — validation of Telegram Mini App init data.
-  - `pkg/history/` — saved runs in SQLite (`modernc.org/sqlite`, no cgo).
-  - `pkg/card/` — the plan drawn as a PNG for a chat, with the Go fonts; no font file lives in the repository.
-  - `pkg/wasmcalc/` — runs `calc.wasm` on the server through wazero when `CALC_ENGINE=wasm`.
-- `cmd/wasm/` — browser bundle (`js && wasm`), built with TinyGo into `assets/json.wasm`.
-- `cmd/calcwasm/` — server WASI reactor (`wasip1`, `go:wasmexport`), built into `pkg/wasmcalc/calc.wasm`.
-- `assets/` — the page (`index.html`), `json.wasm` and the `wasm_exec.js` of the toolchain that built it, the web app manifest, the service worker (`sw.js`) and the icons, whose PNGs are rendered from `icon.svg`.
-- Keep new domain logic under `pkg/<feature>/`.
+Инструкции для агентов (Claude Code, Codex и других), которые работают с этим репозиторием.
+`CLAUDE.md` только подключает этот файл: Claude Code читает `CLAUDE.md`, остальные агенты — `AGENTS.md`.
 
-## Build, Test, and Development Commands
-- `go test -race ./ ./pkg/...` — unit tests.
-- `go vet ./ ./pkg/...` — static checks.
-- `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...` — lint with the CI version, built by the local toolchain.
-- `go build ./...` — compile everything, including the host fallbacks of the wasm commands.
-- `./build.sh` — rebuild both wasm artifacts: TinyGo for the browser (on macOS inside a Linux container, because Homebrew's TinyGo produces different bytes from CI; needs Docker), the standard toolchain for the server reactor; `WASM_COMPILER=go ./build.sh` builds the browser bundle with the standard toolchain. Run it after changing `cmd/wasm`, `cmd/calcwasm`, `pkg/calculator` or `pkg/analysis`, and commit the artifacts. The image does not rebuild them: it embeds the committed files, and CI fails when `./build.sh` leaves a diff.
-- `PORT=8080 TELEGRAM_TOKEN=... HOST=... DEBUG=true go run .` — run locally. The server contacts Telegram at startup, so it needs a real token; `DEBUG=true` deletes the bot's webhook, so use a separate test bot.
-- `python3 -m http.server 8080 -d assets` — serve only the page; the calculator runs entirely in the browser.
-- `node scripts/checks/all.mjs` — the page checks in headless Chrome: languages, offline and install, validation messages, saved runs, the distance slider, Telegram `startapp` links. Needs Node 22+ and Chrome; `CHROME`, `ASSETS` and `CHECK_OUT` override the browser, the page directory and where screenshots are kept.
+## Структура репозитория
 
-## Coding Style & Naming Conventions
-- Use standard Go formatting (`gofmt`) and imports (`goimports` if available).
-- Follow idiomatic Go naming: exported identifiers in `CamelCase`, internal helpers in `camelCase`.
-- Keep packages small and cohesive; prefer constructor-style initialization (for example `NewService()`).
-- Library packages under `pkg/` return errors; only `main` exits. Log with `log/slog` key-value attributes.
-- Use tabs/formatting produced by `gofmt`; do not hand-align spacing.
-- Page text lives in the `messages` dictionary in `assets/index.html`: add every new string to both `ru` and `en` under the same key, and mark static markup with `data-i18n` (text) or `data-i18n-label` (`aria-label`). Bot replies live in `pkg/telegram/messages.go`.
+- `main.go` — точка входа: конфигурация из окружения, движок расчёта, история (если задан
+  `DB_PATH`), Telegram-сервис, HTTP-сервер и мягкая остановка. Только связывание, без логики.
+- `pkg/calculator/` — чистые формулы без I/O: темп и время, равномерные отсечки, прогноз по Ригелю
+  и Кэмерону, VDOT по Дэниелсу и тренировочные темпы.
+- `pkg/analysis/` — структуры ответов для отсечек, прогноза и VDOT, общие для HTTP API и
+  браузерного wasm, поэтому оба отдают одинаковый JSON.
+- `pkg/http/rest/` — HTTP API (`/api/v1/...`), `/healthz`, вебхук Telegram, статика и сама
+  страница с превью ссылки (`preview.go`).
+- `pkg/telegram/` — бот: очереди, обработчики, ответы с кнопками (см. «Планы в боте»).
+- `pkg/plan/` — разбор плана в свободной форме и отсечки для раскладки.
+- `pkg/miniapp/` — проверка `initData` Telegram Mini App.
+- `pkg/history/` — сохранённые расчёты в SQLite (`modernc.org/sqlite`, без cgo).
+- `pkg/card/` — план картинкой PNG на шрифтах Go; своих файлов шрифтов в репозитории нет.
+- `pkg/wasmcalc/` — исполняет `calc.wasm` на сервере через wazero при `CALC_ENGINE=wasm`.
+- `cmd/wasm/` — браузерный бандл (`js && wasm`), `cmd/calcwasm/` — серверный WASI-reactor.
+- `assets/` — страница `index.html`, `json.wasm` с `wasm_exec.js` того же тулчейна, манифест,
+  service worker `sw.js` и иконки (PNG растрированы из `icon.svg`).
+- `scripts/checks/` — проверки страницы в headless Chrome.
+- `.github/workflows/` — `ci.yml` (проверки и сборка образа) и `release.yml` (ручной релиз).
 
-## Testing Guidelines
-- Use Go's `testing` package with table-driven tests (see `pkg/calculator/timing_test.go`).
-- Test files end with `_test.go`; test functions are named `Test<Behavior>`.
-- Write the failing test first, then the code.
-- Check formulas against published reference values, not against the implementation itself: the VDOT tests use Daniels' table, the Mini App tests use Telegram's published init data example.
-- Test HTTP handlers through `httptest`. The Telegram client can be tested without a token via `bot.WithSkipGetMe()` and `bot.WithServerURL()`; note that it sends `multipart/form-data`, not JSON.
-- For page changes, run `node scripts/checks/all.mjs` and add a check there for the behaviour you changed; it covers 390 px, both colour schemes, both languages and offline.
-- `assets_test.go` serves every file `index.html` links through the real handler and checks its `Content-Type`; list a newly linked file there. A file the page needs offline also goes into `SHELL` in `assets/sw.js`.
-- CI runs on pull requests and pushes to `master`, not on other branch pushes, so build the image locally with `docker build .` before a pull request. Releases are cut by hand from `master` with the `release` workflow (choose patch, minor or major); it publishes the image to `ghcr.io/proshik/pacer` with the workflow token (no secrets), pushes the tag and opens a draft release to edit. The browser wasm exports can be called under Node through `assets/wasm_exec.js`.
-- Run tests, lint and `./build.sh` before opening a pull request.
+Новая предметная логика — в своём пакете `pkg/<feature>/`.
 
-## Commit & Pull Request Guidelines
-- Commit subjects are short and imperative (for example: `add telegram webhook api`); the body explains why.
-- Prefer one logical change per commit.
-- PRs should include:
-  - purpose and scope,
-  - related issue/ticket (if any),
-  - test evidence (`go test -race`, lint, `./build.sh`, browser checks for page changes),
-  - screenshots when the page in `assets/` changes.
+## Команды
 
-## Security & Configuration Tips
-- Required runtime env vars: `PORT`, `TELEGRAM_TOKEN`, `HOST`; optional: `DEBUG`, `LOG_LEVEL`, `CALC_ENGINE`, `DB_PATH`.
-- Mini App requests authenticate with `Authorization: tma <initData>`; the server validates the signature with the bot token and accepts data for 24 hours.
-- Never put the URL hash into a share link: inside Telegram it holds the user's signed init data.
-- Build link preview tags from parsed numbers only; never copy a query value into the page markup.
-- Never commit real secrets or tokens. Use local shell exports or deployment secret management.
+```bash
+go test -race ./ ./pkg/...  # юнит-тесты (в cmd/wasm тестов нет; ./... тоже работает)
+go test -run TestHealthz ./pkg/http/rest/   # один тест
+go vet ./ ./pkg/...
+go build ./ ./pkg/...
+./build.sh                  # пересборка обоих wasm-артефактов (см. ниже)
+go run .                    # запуск сервера (подхватывает .env, если он есть)
+```
 
-## Agent Workflow Notes
-- When planning work, create or update `PLAN.md` with a TODO checklist (`[ ]` items). The plan is kept in Russian.
-- As soon as a task is completed, mark it done in `PLAN.md` (`[x]`) in the same work session.
-- Add short dated status entries in `PLAN.md` when meaningful milestones are finished.
-- Do not leave completed work unmarked; keep plan state synchronized with actual implementation progress.
+`./build.sh` собирает **два** wasm-артефакта, оба закоммичены в репозиторий:
+
+- `assets/json.wasm` — браузерный бандл на **TinyGo** (0,38 МБ на TinyGo 0.42 поверх Go 1.26.4 против 4,5 МБ на обычном Go), грузится из `assets/index.html`. `wasm_exec.js` копируется из того же тулчейна: файлы TinyGo и Go не взаимозаменяемы. `WASM_COMPILER=go ./build.sh` — сборка обычным Go;
+- `pkg/wasmcalc/calc.wasm` (`GOOS=wasip1`, `-buildmode=c-shared`) — WASI-reactor, который
+  сервер исполняет через wazero.
+
+Скрипт обязателен после любых изменений в `cmd/wasm/`, `cmd/calcwasm/`, `pkg/calculator/` или
+`pkg/analysis/`.
+`main.go` встраивает `assets/` через `go:embed`, а `pkg/wasmcalc` — свой `calc.wasm`, поэтому
+бинарь сервера тоже нужно пересобрать, иначе будет исполняться старый WASM.
+
+Сборки воспроизводимы: две подряд дают побайтно одинаковые файлы. Байты зависят от версии Go
+(TinyGo берёт стандартную библиотеку из установленного Go), поэтому в `go.mod` закреплён
+`toolchain go1.26.4`: `setup-go` в CI читает его, и CI собирает тем же Go, что и эта машина.
+Без этой строки CI брал Go 1.26.0 из директивы `go`, а артефакты были собраны на 1.27.1 — проверка
+свежести wasm падала. Меняя версию Go, меняй `toolchain` и пересобирай оба артефакта. Reactor собирается с
+`-trimpath -buildvcs=false` — иначе Go вшивает в него ревизию git, и `calc.wasm` менялся бы с
+каждым коммитом без изменений кода. Если `json.wasm` или `calc.wasm` появились в `git status` без
+правок в `cmd/`, `pkg/calculator` или `pkg/analysis`, скорее всего поменялся тулчейн.
+
+Образ wasm не пересобирает: в него попадают закоммиченные `assets/json.wasm`, `assets/wasm_exec.js`
+и `pkg/wasmcalc/calc.wasm`, поэтому в прод уезжает ровно то, что проверялось. Сторож — шаг CI
+`git diff --exit-code` по этим файлам сразу после `./build.sh`: забытая пересборка валит сборку, а
+не тихо уезжает в образ. Раньше Dockerfile собирал бандл сам, и TinyGo в образе (поверх своего Go)
+давал другой по байтам `json.wasm`, который никто не проверял.
+
+Сборочная стадия — `FROM --platform=$BUILDPLATFORM`: бинарь чистый Go и собирается под
+`TARGETOS`/`TARGETARCH`, так что компиляция под `amd64` на этом Mac идёт без эмуляции (~20 с);
+под эмуляцией выполняется только финальная стадия с `RUN` в Alpine.
+Публикация по тегу в CI собирает `linux/amd64` и `linux/arm64` и пушит в `ghcr.io/proshik/pacer` `latest` вместе с версией — через `GITHUB_TOKEN` (`packages: write`), секретов нет; Docker Hub больше не используется.
+
+Релизы срезаются вручную workflow `release.yml` (`workflow_dispatch`, выбор `patch`/`minor`/`major`,
+только от `master`). Он вызывает `ci.yml` через `workflow_call`, публикует образ, затем пушит тег
+и открывает черновик релиза с `--generate-notes`. Порядок важен: образ до тега, чтобы упавшая
+публикация не оставила тег без образа. Тег, запушенный через `GITHUB_TOKEN`, не запускает другие
+workflow, поэтому публикация по тегу в `ci.yml` не срабатывает второй раз; она остаётся для тегов,
+запушенных руками. Финальная стадия Dockerfile выполняет `RUN` на целевой платформе, поэтому для
+`arm64` в CI нужен QEMU.
+
+Полный набор проверок перед коммитом повторяет `.github/workflows/ci.yml`: `go test -race`,
+`go vet`, golangci-lint v2.13 (через `go run`, см. ниже), `./build.sh` на TinyGo, `go build ./...`.
+Страницу это не покрывает: её проверяют шесть скриптов на Node с headless Chrome —
+`scripts/checks/language.mjs`, `offline.mjs`, `validation.mjs`, `saved-runs.mjs`, `slider.mjs` и
+`startapp.mjs`; все разом —
+`node scripts/checks/all.mjs`. Нужны Node 22+ (встроенный `WebSocket`) и Chrome; путь к браузеру
+задаёт `CHROME`, каталог страницы — `ASSETS`, а `CHECK_OUT` сохраняет скриншоты вместо
+временного каталога. Как они устроены — в разделе «Проверка страницы без браузерного
+расширения».
+
+Пользовательская документация — `README.md` (на русском). После заметных изменений обновляй её
+вместе с `PLAN.md` и этим файлом.
+
+### Особенности машины
+
+`go env GOPROXY` указывает на корпоративный Nexus-прокси, который отдаёт `Bad Gateway` для
+публичных модулей этого проекта. Если скачивание модулей падает, добавляй префикс
+`GOPROXY=https://proxy.golang.org,direct` к go-командам.
+
+На macOS `./build.sh` собирает браузерный бандл в контейнере `golang:<toolchain из go.mod>` с
+TinyGo 0.42.0 из deb-пакета, поэтому нужен работающий Docker (здесь — colima). Причина: TinyGo из
+Homebrew на macOS даёт другие байты `json.wasm`, чем TinyGo под Linux, а Linux-сборка (любая
+архитектура) совпадает с CI побайтно — проверено 2026-09-22. На Linux и в CI TinyGo запускается
+напрямую. Локальный TinyGo из Homebrew (установлен 2026-09-22) можно включить через
+`TINYGO_NATIVE=1`, но коммитить его бандл нельзя — проверка свежести в CI упадёт. TinyGo 0.42
+поддерживает Go 1.23–1.27; после перехода на Go 1.28 его может понадобиться обновить
+(`TINYGO_VERSION` в `build.sh` и `tinygo-version` в `ci.yml`). Запасной путь без TinyGo — `WASM_COMPILER=go ./build.sh`,
+но он даёт другой по размеру `json.wasm` (4,5 МБ вместо 0,38 МБ), и коммитить такой бандл не надо.
+
+`node` стоит из Homebrew: `/opt/homebrew/bin/node` (v26). Каталога `~/.nvm/versions` на машине
+больше нет.
+
+Локальный Go на 2026-09-11 — 1.26.4 (раньше стоял 1.27.x, версия на машине меняется), а бинарь `golangci-lint` из brew может быть собран более старым Go и
+падать с `export data version ... is greater than maximum supported version`. Обход — запускать
+линтер тем же тулчейном:
+`go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...`
+
+## Архитектура
+
+Один Go-модуль `gorun`, из которого собираются **три** цели поверх общего ядра
+`pkg/calculator`:
+
+1. **Сервер** (`main.go`) — HTTP + Telegram-бот, раздаёт встроенный фронтенд из `assets/`.
+2. **Браузерный WASM** (`cmd/wasm/main.go`) — build-теги `js && wasm`, компилируется в
+   `assets/json.wasm`.
+3. **Серверный WASI-reactor** (`cmd/calcwasm/main.go`) — build-теги `wasip1 && wasm`,
+   компилируется в `pkg/wasmcalc/calc.wasm`.
+
+У обеих wasm-целей есть заглушка `main_nowasm.go` с обратными тегами — она нужна только чтобы
+IDE и `go build ./...` не падали с «build constraints exclude all Go files».
+
+### Движок расчёта выбирается на старте
+
+`pkg/calculator.Engine` — интерфейс с двумя методами (`Time`, `Pace`). Его реализуют:
+
+- `calculator.Service` — формулы, слинкованные в бинарь напрямую;
+- `wasmcalc.Engine` — тот же `pkg/calculator`, но исполняемый из `calc.wasm` через wazero.
+
+Переменная `CALC_ENGINE` (`native` по умолчанию, либо `wasm`) выбирает реализацию в
+`newCalculationEngine` в `main.go`. Смысл второй — гарантировать, что браузер, бот и API
+считают одинаково: это один скомпилированный артефакт, а не две копии кода. Эквивалентность
+проверяется тестом в `pkg/wasmcalc`, там же тест на конкурентность — экземпляр модуля один на
+всех, вызовы сериализуются мьютексом.
+
+`pkg/calculator` — чистая арифметика без I/O, так и надо оставить: `Pace`/`Time` на
+метрах/секундах (обёрнуты в `Service` с `time.Duration`), `EvenSplits`, `PredictRiegel`,
+`PredictCameron`, `VDOT`, `RaceTimeForVDOT`, `TrainingPacesForVDOT`. Константы формул сверены
+с источниками; эталоны VDOT в тестах — опубликованная таблица Дэниелса (5K за 19:57 и марафон
+за 3:10:49 дают по формуле 49.95, то есть таблица сгенерирована теми же уравнениями). Колонкам
+«интервал» и «повторы» из таких таблиц не доверять — в найденной они противоречили сами себе.
+
+`/api/v1/splits`, `/api/v1/predict` и `/api/v1/vdot` вызывают эти функции напрямую, а не через
+`Engine`, поэтому `CALC_ENGINE=wasm` на них не действует: в wasm экспортированы только
+`calc_time` и `calc_pace`. Бот тоже считает нативно: его планы разбирает `pkg/plan`, а подпись и
+карточку делает `pkg/card`, оба зовут `calculator.NewService()`. `Engine` сейчас получают только
+`/api/v1/time`, `/api/v1/pace` и превью ссылки.
+
+### DEBUG переключает весь рантайм
+
+`DEBUG` — это не просто уровень логов, а выбор режима работы сразу в `pkg/telegram` и
+`pkg/http/rest`:
+
+| | `DEBUG=true` (локально) | `DEBUG=false` (прод) |
+|---|---|---|
+| Telegram | `deleteWebhook`, затем long-polling | `setWebhook` на `HOST/<token>` |
+| Роуты | — | вебхук `POST /<TELEGRAM_TOKEN>` |
+
+`/healthz`, раздача статики и API (`/api/v1/time`, `/pace`, `/splits`, `/predict`, `/vdot`, `/me`, `/runs`, `/card.png`) регистрируются в обоих
+режимах — набор роутов больше не зависит от уровня логирования. Хост вебхука обязан быть
+`https` (`buildWebhookURL`), поэтому `DEBUG=false` невозможно проверить на `http://localhost`.
+
+### Telegram-сервис построен на каналах
+
+Клиент — `github.com/go-telegram/bot` (Bot API 10.3, без зависимостей).
+
+`telegram.NewService` запускает три горутины под общим `sync.WaitGroup`: диспетчер
+(разводит `startC`/`textC`/`timeC`/`paceC`/`cardC`/`unknownC`/`callbackC` по хендлерам),
+отправитель (вычитывает `messages` и вызывает `send` у `textReply`, `photoReply` или
+`callbackReply`) и — только в режиме polling — `bot.Start`.
+Все отправки в каналы неблокирующие, с веткой `default:` (drop + warn): при переполнении
+очереди апдейт теряется, но хендлер вебхука не блокируется. `Close(ctx)` один раз закрывает
+`done`, отменяет контекст polling и ждёт WaitGroup; `main.go` вызывает его после
+`server.Shutdown` в рамках общего 10-секундного контекста.
+
+В новой библиотеке нет аналогов `IsCommand()`/`Command()` из v4, поэтому команду и аргументы
+разбирает свой `parseCommand` по entity `bot_command` со смещением 0.
+
+`NewService` публикует меню команд (`publishCommands`): два вызова `setMyCommands` — без языка
+(английское меню) и с `ru`. Ошибка публикации только пишется в лог: меню — не повод не поднять
+бота.
+
+Тестируемость: `bot.WithSkipGetMe()` позволяет создать клиент без обращения к сети, а
+`bot.WithServerURL()` — направить его на `httptest`. Библиотека кодирует вызовы как
+`multipart/form-data`, а не JSON, — это важно при написании тестовых серверов.
+
+### Планы в боте
+
+Бот понимает план так, как его пишет бегун: `марафон 3:30`, `10k 4:50`, `21,1 км 1:38:48`,
+`4:50/km 10k`. Разбор — свой пакет `pkg/plan` (выбран вместо библиотеки): дистанция — метры
+(голое целое от 400), километры, мили или название забега; время — `ч:мм:сс`, `мм:сс` или
+длительность Go. Что значит `3:30`, решает правдоподобие темпа (1:30–20:00 на км): для марафона
+это 3 ч 30 мин финиша, для 10 км — темп. `/pace` читает время как финишное (`plan.FinishTime`),
+`/time` — как темп (`plan.Pace`), сообщение без команды — как `plan.Auto`, а не понятое —
+получает приветствие. Старый синтаксис (`/pace 21097 1h38m48s`) продолжает работать. Ошибка
+разбора называет, чего не хватает, и цитирует непонятые слова (`plan.Unrecognized`).
+
+Ответ на план (`pkg/telegram/plan.go`) — HTML-сообщение с жирной фразой из `card.Caption` и
+кнопками «Раскладка», «Прогноз», «Карточка» и, если `HOST` — https, «Открыть в Pacer» на
+`/?d=&t=&l=`. Кнопки шлют `callback_data` вида `splits:21097:5928` (вид, метры, секунды). Эти
+данные приходят от клиента, поэтому `parseCallback` отбрасывает всё вне 1 м–1000 км и
+1 с–1000 ч. Нажатие переписывает то же сообщение (`editMessageText`): раскладка и прогноз идут
+таблицей в `<pre>`, а кнопка текущего вида сменяется на «← План». «Карточка» присылает фото. На
+каждое нажатие сначала уходит `answerCallbackQuery`, иначе у кнопки крутятся часики.
+
+Кнопки `web_app` Telegram принимает только в личных чатах — в группе сообщение с ними не
+отправится. Поэтому `siteButton` в личке делает `web_app`, а в остальных чатах — обычную ссылку
+на тот же адрес. `/start` приветствует примерами и кнопкой «Открыть Pacer» на `HOST`.
+
+### Telegram Mini App
+
+Запуск внутри Telegram страница узнаёт по `tgWebAppData` в хэше URL. Только тогда она подключает
+`telegram-web-app.js` с telegram.org — в обычном браузере внешних запросов нет. Нейтральные цвета
+берутся из `themeParams`: сначала из хэша, чтобы не мигать, потом из SDK и по событию
+`themeChanged`. Жёлтая разметка остаётся своей. Вход (`/api/v1/me`) и начальная тема берутся из
+хэша сразу и SDK не ждут: telegram.org может грузиться медленно или быть замедлен, а данные для
+входа уже есть в `tgWebAppData`. Ссылка `t.me/<бот>?startapp=d42195_t12600` открывает страницу на плане: `startAppPlan()`
+читает `tgWebAppStartParam` из адреса, а если там его нет — из хэша. Двоеточие в `startapp`
+запрещено, поэтому время — в секундах. Явные `d` и `t` в адресе важнее. Хэш — это параметры
+запуска Telegram, поэтому
+`updateShareURL` обязан его сохранять в адресной строке. А ссылка, которую копирует кнопка,
+строится через `shareURL()` без хэша: в `tgWebAppData` подпись пользователя, по чужой ссылке с ней
+можно было бы 24 часа читать и менять его сохранённые расчёты.
+
+Сервер проверяет `initData` своим валидатором `pkg/miniapp`, а не `bot.ValidateWebappRequest`.
+Тот повторно раскодирует значения, уже раскодированные `url.Values`, и сравнивает подпись не за
+постоянное время. Клиент шлёт `initData` в `Authorization: tma <initData>`, `/api/v1/me`
+принимает данные 24 часа. Поле `signature` (Bot API 8.0) участвует в проверке `hash` как
+обычное — это вывод из официальной формулировки и из кода init-data-golang, и живой запуск
+2026-09-16 его подтвердил: вход с `signature` прошёл проверку.
+
+При успешном входе сервер пишет в debug-лог `mini app sign-in` с `language_code` и признаком
+`signature`: по нему видно, что прислал живой клиент, не трогая сам клиент.
+
+### История расчётов
+
+`pkg/history` — SQLite через `modernc.org/sqlite`: это чистый Go, а образ собирается с
+`CGO_ENABLED=0`. База открывается, только если задан `DB_PATH`; без него `/api/v1/runs` отвечает
+503, остальное работает. Соединение одно (`SetMaxOpenConns(1)`) — очередь вместо «database is
+locked». Все маршруты `/api/v1/runs` требуют `Authorization: tma <initData>`, при удалении чужая
+запись даёт 404, а не 403. Хранятся дистанция и время, темп выводится. Маршруты истории заданы с
+методами (`GET /api/v1/runs`, `DELETE /api/v1/runs/{id}`) — это ServeMux Go 1.22+.
+
+На странице раздел «Сохранённые расчёты» и кнопка «Сохранить» работают с одним из двух хранилищ
+с общим интерфейсом (`list`, `save`, `remove`): `serverRuns` — `/api/v1/runs` с заголовком `tma`,
+если страница открыта в Mini App и сервер ведёт историю; иначе `localRuns` — `localStorage`
+(`pacer.runs`, не больше 50, как на сервере), в том числе в Mini App при 503. Если хранилище
+недоступно (приватный режим, запрет сайтам хранить данные), раздела нет. Хранилища не
+смешиваются: при серверной истории браузер ничего не хранит. Сохраняется последний показанный
+план (`shownPlan`), а не сырые поля — при ошибке в поле иначе ушло бы молча пересчитанное время.
+
+### Контракт JS ↔ WASM (асимметричный — не «выравнивать»)
+
+`assets/index.html` вызывает две глобальные функции, экспортируемые WASM-модулем; обе
+возвращают JSON-строку `{hour,minute,second}` либо `{error}`:
+
+- `calcPace(dist, hours, minutes, seconds)` — принимает аргументы и возвращает результат.
+- `calcTime()` — **без аргументов**: сама читает `distInput`, `paceMinuteInput`,
+  `paceSecondInput` из DOM по id и **записывает результат** в `timeHourInput`,
+  `timeMinuteInput`, `timeSecondInput`.
+
+Переименование этих id в `index.html` молча ломает `calcTime`.
+
+Кроме них модуль экспортирует чистые функции (DOM не трогают):
+`calcSplits(distMeters, raceSeconds, stepMeters)`, `calcPredict(distMeters, raceSeconds)`,
+`calcVDOT(distMeters, raceSeconds)`. Они отдают тот же JSON, что `/api/v1/splits`, `/predict` и
+`/vdot`: структуры живут в `pkg/analysis`, а не дублируются. `calcSplits` принимает время
+забега, а не темп — иначе округлённый до секунды темп даёт расхождение финишной отметки с
+показанным временем (на полумарафоне около 9 с). Аргументы проверяются на тип:
+`js.Value.Int` паникует на не-числах и роняет модуль.
+
+Проверить экспорты без браузера можно под Node: задать `globalThis.crypto`
+(`require("crypto").webcrypto`), подключить `assets/wasm_exec.js`, инстанцировать
+`assets/json.wasm` — после `go.run(instance)` функции доступны синхронно.
+
+### Приоритет конфигурации
+
+`main.go` сначала читает реальные переменные окружения, а из `.env` в корне подставляет только
+**отсутствующие** ключи (самописный парсер `loadDotEnvIfExists`, понимает префикс `export ` и
+кавычки). Окружение всегда важнее `.env`. `PORT`, `TELEGRAM_TOKEN`, `HOST` обязательны — без
+любого из них процесс завершается; `DEBUG` и `LOG_LEVEL` опциональны (`LOG_LEVEL`
+перекрывает уровень, вытекающий из `DEBUG`). `CALC_ENGINE` выбирает движок расчёта, `DB_PATH` включает историю.
+
+Пакеты `pkg/...` возвращают ошибки — никаких `panic`/`log.Fatal`; из процесса выходит только
+`main`. Логирование — `log/slog` с key-value атрибутами.
+
+## Соглашения проекта
+
+Держи `PLAN.md` в актуальном состоянии (он на русском): при планировании добавляй пункты `[ ]`,
+отмечай их `[x]` в той же сессии, где работа закончена, и дописывай датированную строку в Status
+Log по значимым вехам. Сделанная, но не отмеченная работа — рассинхрон плана с кодом.
+
+Код — стандартный `gofmt` (и `goimports`, если есть), без ручного выравнивания. Имена по-гошному:
+экспортируемые в `CamelCase`, внутренние в `camelCase`; пакеты маленькие и связные, конструкторы
+вида `NewService()`.
+
+Тесты — пакет `testing`, табличные (пример — `pkg/calculator/timing_test.go`), функции
+`Test<Поведение>`. Сначала падающий тест, потом код. Формулы сверяются с опубликованными
+эталонами, а не с самой реализацией: VDOT — с таблицей Дэниелса, Mini App — с примером `initData`
+из документации Telegram. HTTP-обработчики тестируются через `httptest`. Изменение страницы —
+повод добавить проверку в `scripts/checks/`. Новая ссылка из `index.html` — строка в
+`assets_test.go`, а файл, нужный офлайн, — ещё и в `SHELL` в `assets/sw.js`.
+
+Коммиты: короткий заголовок в повелительном наклонении по-английски (`add telegram webhook api`),
+в теле — зачем; одно логическое изменение на коммит. В PR — цель и объём, связанная задача, если
+есть, результаты проверок (`go test -race`, линтер, `./build.sh`, проверки страницы) и скриншоты,
+если менялась страница.
+
+Безопасность: настоящие токены и секреты в репозиторий не коммитятся — только в `.env` (он в
+`.gitignore`) или в секреты развёртывания. Хэш адреса никогда не попадает в ссылку для шаринга:
+внутри Telegram там подписанный `initData` пользователя. Теги превью собираются только из
+разобранных чисел, значение из адреса в разметку не копируется.
+
+`README.md` написан на русском — при правках сохраняй язык.
+
+## Интерфейс
+
+Поля времени и темпа — `type="text"` с `inputmode="numeric"`, а не `number`: так видны ведущие
+нули (`4:04`). Ширина поля подгоняется по числу цифр (`autosize`). Какое из двух чисел посчитано,
+показывает класс `is-derived` на `.readout`. Колонка `.shell` задана как `minmax(0, 1fr)`: без
+этого лента пресетов на телефоне раздвигает всю страницу до своей ширины.
+
+Слайдер дистанции нелинейный: `input` хранит позицию 0…1500 (`step="any"`), а метры считают
+`positionToMeters` и `metersToPosition` по `sliderScale`. Первые две трети дорожки — 0–50 км с
+шагом 100 м (на телефоне около 210 м на пиксель), остальное — до 500 км с шагом 1 км; левый край —
+100 м, а не ноль. Излом отмечен риской `#sliderKnee`, её подпись переводится. Пресеты и поле
+метров двигают ползунок через `syncDistanceToSlider`, а не пишут метры в `slider.value`. Стрелки
+перехвачены и шагают на шаг своего участка (`sliderStep`), `PageUp`/`PageDown` — на десять шагов.
+Диктору слайдер называет километры через `aria-valuetext`.
+
+Разряды времени и темпа устроены как табло. Стрелки (`.spin-btn`) позиционированы абсолютно и не
+задают ширину колонки — её задаёт `autosize` ровно по числу цифр (табличные цифры по 1ch); строка
+выровнена по базовой линии. Какое из двух чисел рассчитано, показывают подпись
+«рассчитано»/«рассчитан» и чуть более мягкий цвет цифр — `color-mix` текста с фоном, поэтому
+цвет сам подстраивается под тёмную тему и тему Telegram. Жёлтое подчёркивание пробовали и убрали:
+оно дублировало подпись и читалось как ссылка или ошибка. У стрелок `tabindex="-1"`: Tab ходит только по цифрам, шаг с
+клавиатуры — ↑↓ в поле.
+
+Шапка — «план забега»: заголовок `#planLine` собирает `updateHeader()` из дистанции, времени и
+темпа — «Полумарафон за 1:38:48 — это 4:41 на километр». До загрузки WASM показывается только
+«дистанция за время»: темп в полях ещё не пересчитан, а при открытии ссылки иначе мелькнул бы
+чужой план. Перед тире стоит неразрывный пробел, чтобы тире не начинало строку. Приветствие Mini
+App по-прежнему пишет в `#lede`.
+
+Ошибки ввода стоят под своей группой полей — `#distanceError`, `#timeError`, `#paceError`, — а
+поля ссылаются на них через `aria-describedby` и получают `aria-invalid`. Проверки
+(`validateInputsForPace`, `validateInputsForTime`) возвращают список `{id, group, key}`: отмечаются
+все неверные поля, в группе показывается первое сообщение. Нулевое время отклоняется так же, как
+нулевой темп. Сообщения короче числа на табло, поэтому на десктопе колонку времени не
+раздвигают; более длинный текст сдвинул бы темп вбок — это стоит проверить при правке словаря.
+
+Подзаголовок `#lede` и сноски `.section-note` резервируют две строки (`min-height: 2lh`): перевод
+длиннее или короче, и без резерва страница прыгала при смене языка. Резерв задан именно на них,
+а не на `.masthead p`: слово Pacer — тоже абзац в шапке, и с лишней высотой переключатель языка
+уезжал ниже него. Проверка выравнивания меряет текст через `Range`, а не блок элемента — по
+блокам эта ошибка не видна.
+
+Логотип в шапке — `icon.svg` (32 px) и слово Pacer в 24 px; заголовок плана под ним легче (600, 20–28 px), чтобы не перебивать логотип. Слово в 16 px терялось рядом с
+заголовком плана и читалось как подпись. В тёмной теме у иконки тонкий край: её асфальт почти
+сливается с фоном.
+
+### Языки
+
+Страница и бот работают на русском и английском. Все строки страницы лежат в словаре `messages` в
+`assets/index.html`: у `messages.ru` и `messages.en` одинаковые ключи, строки с подстановками —
+функции, `t(key, ...args)` берёт строку текущего языка. Статичная разметка остаётся русской (это
+вид без JS), а текст с `data-i18n` и `aria-label` с `data-i18n-label` переводит `applyLanguage()`.
+Динамический текст ставится через `setText(element, key)`: ключ остаётся в `data-i18n`, поэтому
+смена языка переводит и уже показанную ошибку или статус. Шапка, раскладка, прогноз, приветствие
+и сохранённые расчёты перерисовываются из запомненного состояния (`shownPlan`, `shownAnalysis`,
+`greetingName`, `savedRuns`), а не из полей — в полях в этот момент может быть ошибка. Новая
+строка — это ключ в обоих словарях; расхождение ловит сравнение `Object.keys(messages.ru)` и
+`Object.keys(messages.en)`.
+
+Порядок выбора языка: ручной выбор из `localStorage` (`pacer.lang`), затем `language_code`
+пользователя из `tgWebAppData` в хэше (SDK не ждём), затем `navigator.languages`, иначе
+английский. Переключатель в шапке — пара кнопок `RU | EN` (`.lang-option` с `aria-pressed` и
+`lang`); выбранный язык залит цветом текста, а не жёлтым — жёлтым отмечена выбранная дистанция.
+`setInputsDisabled` их не трогает, они работают и до загрузки WASM. Числа и даты форматируются через `locales[language]`: `21,097 км` и
+`21.097 km`.
+
+Тексты ошибок из WASM технические и английские: страница показывает свою фразу, а исходный текст
+пишет в консоль. Неразрывные пробелы в словаре записываются как `\u00a0`: буквальный символ в
+коде не отличить от обычного пробела.
+
+Бот выбирает язык по `message.From.LanguageCode` (`textsFor` в `pkg/telegram/messages.go`), а
+для нажатий на кнопки — по `CallbackQuery.From.LanguageCode` (`textsForLanguage`): `ru` и `ru-*`
+получают русский, все остальные и сообщения без отправителя — английский. Фразу плана бот берёт
+из `pkg/card`, а названия дистанций в таблице прогноза (`distanceName`) — ещё одна копия
+формулировок.
+
+### Офлайн и установка
+
+`assets/manifest.json`, иконки и `assets/sw.js` делают страницу устанавливаемой и рабочей без
+сети. Service worker ходит сначала в сеть и только без неё отдаёт кэш: новая выкладка видна
+сразу, а имя кэша (`CACHE`) меняется, только если меняется логика самого worker'а. Кэшируются
+лишь страница и её файлы (`SHELL`); API, `/healthz` и чужие хосты идут мимо. Страница с любым
+`?d=&t=` хранится одной записью — расчёт из адреса восстанавливает скрипт. Навигация на другие
+пути в кэш не пишется, иначе открытый в браузере `/api/v1/pace` затёр бы страницу. Файл, без
+которого страница не работает офлайн, нужно добавить в `SHELL`.
+
+Service worker регистрируется только в безопасном контексте — на https и localhost; по
+`http://<адрес в сети>` его не будет. Иконка нарисована в `assets/icon.svg` (он же favicon, со
+скруглением); `icon-192.png`, `icon-512.png` и `apple-touch-icon.png` — та же картинка без
+скругления (платформа скругляет или маскирует сама), растрированная из SVG в headless Chrome.
+Значимые элементы лежат в безопасной зоне maskable-иконки — круге 80 % по центру.
+
+`assets_test.go` проверяет через настоящий обработчик, что всё, на что ссылается `index.html`,
+встроено в бинарь и отдаётся с правильным `Content-Type`. В Alpine-образе нет `mime.types`, там
+работает только встроенная таблица Go, поэтому манифест называется `manifest.json`, а не
+`.webmanifest`. Новая ссылка в `index.html` без записи в этом тесте роняет его.
+
+### Превью ссылки
+
+`GET /` обслуживает не `FileServer`, а `pageHandler` (`pkg/http/rest/preview.go`). Он отдаёт
+`index.html`, заменив блок между `<!-- og:start -->` и `<!-- og:end -->` тегами с планом из
+`?d=&t=` — «Марафон за 3:44:20 — это 5:19 на километр»; темп считает тот же `Engine`. `og:url` и
+`og:image` абсолютные, от `HOST` (`NewHandler` получает его третьим аргументом); непригодный
+`HOST` даёт относительные адреса и предупреждение в логе, а не падение на старте.
+
+Язык превью: сначала `l` из скопированной ссылки (`shareURL()` дописывает язык того, кто
+делится; страница получателя `l` не читает), затем `Accept-Language`, иначе русский — сканеры
+мессенджеров язык обычно не присылают, а все старые ссылки были русскими. Теги собираются только
+из разобранных чисел, так что разметка из ссылки на страницу не попадает. Страница без маркеров
+отдаётся байт в байт. Разбор `t` повторяет `parseTimeParam` на странице, а формулировки плана
+продублированы в `previewLanguages` и в словаре страницы — меняя одно, меняй и другое.
+`python3 -m http.server` превью не собирает: там остаются статичные теги из блока.
+
+### Карточка плана картинкой
+
+`pkg/card` рисует PNG 1200×630: слева дистанция, время и темп, справа раскладка по отсечкам.
+Шрифты — Go (`golang.org/x/image/font/gofont`): в них есть кириллица, поэтому TTF в репозитории
+не нужен. Шаг отсечек подбирается под высоту колонки (1, 2, 5, 10 или 20 км, не больше девяти
+строк), финиш — отдельной строкой; дистанцию, которую нечего делить (1 км), правая половина
+оставляет пустой, и на это есть тест. Отрисовка детерминирована (`font.HintingFull`), так что
+тесты сравнивают байты. `Caption` возвращает ту же фразу словами — она идёт подписью к фото.
+
+Отдать карточку можно двумя путями: `GET /api/v1/card.png?d=&t=&l=` (те же параметры, что у
+превью, — `parsePlan` и `previewLanguage`; ответ кэшируется на сутки) и команда бота
+`/card <дистанция> <время>`. Ради фото отправитель в `pkg/telegram` больше не привязан к тексту:
+в канал `messages` кладут `outgoing` — `textReply` или `photoReply`, а сам он только вызывает
+`send`.
+
+Посмотреть на карточки глазами: `CARD_SAMPLE_DIR=/tmp go test ./pkg/card -run TestWriteSampleCards`
+— это тест-инструмент, без переменной он пропускается.
+
+Фразы плана теперь живут в трёх местах: словарь страницы, `previewLanguages` в
+`pkg/http/rest/preview.go` и `languages` в `pkg/card`. Меняя формулировку, меняй все три.
+
+### Проверка страницы без браузерного расширения
+
+`--virtual-time-budget` у headless Chrome зависает на этой странице (асинхронная компиляция
+WASM), а новый профиль Chrome на macOS может запросить доступ к Связке ключей. Надёжный путь —
+Node + DevTools Protocol: запустить Chrome с `--headless=new --remote-debugging-port=<порт>
+--use-mock-keychain --password-store=basic --user-data-dir=<временный каталог>`, подключиться
+встроенным в Node 22 `WebSocket`, дождаться `document.body.dataset.state === "ready"`, дальше
+`Runtime.evaluate`, `Emulation.setDeviceMetricsOverride` (390 px, `mobile: true`),
+`Emulation.setEmulatedMedia` (`prefers-color-scheme`) и `Page.captureScreenshot`. Язык браузера
+задаёт `Emulation.setUserAgentOverride` с `acceptLanguage` — он меняет `navigator.languages`. Горизонтальный
+скролл ловится проверкой `scrollWidth > clientWidth`.
+
+Настоящий сервер без реального токена бота не запустить: `bot.New` сразу ходит в Telegram.
+Поэтому ответы API в браузерной проверке подменяются через `Fetch.enable` и
+`Fetch.fulfillRequest` — заодно видно, какой заголовок `Authorization` отправила страница. У
+каждого скрипта проверки должен быть собственный жёсткий таймаут, и сам вызов тоже нужно
+ограничивать снаружи.
