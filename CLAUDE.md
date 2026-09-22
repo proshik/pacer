@@ -41,7 +41,7 @@ go run .                    # запуск сервера (подхватыва�
 
 Сборочная стадия — `FROM --platform=$BUILDPLATFORM`: бинарь чистый Go и собирается под
 `TARGETOS`/`TARGETARCH`, так что `amd64` на этом Mac собирается за ~20 с, а не под эмуляцией.
-Публикация по тегу в CI собирает `linux/amd64` и `linux/arm64` и пушит `latest` вместе с версией.
+Публикация по тегу в CI собирает `linux/amd64` и `linux/arm64` и пушит в `ghcr.io/proshik/pacer` `latest` вместе с версией — через `GITHUB_TOKEN` (`packages: write`), секретов нет; Docker Hub больше не используется.
 
 Релизы срезаются вручную workflow `release.yml` (`workflow_dispatch`, выбор `patch`/`minor`/`major`,
 только от `master`). Он вызывает `ci.yml` через `workflow_call`, публикует образ, затем пушит тег

@@ -296,15 +296,15 @@ Workflow `.github/workflows/ci.yml` запускается на каждый PR 
 - `./build.sh` с TinyGo 0.42 (`acifani/setup-tinygo`) и проверку, что закоммиченные
   wasm-артефакты совпали с пересобранными (`git diff --exit-code`);
 - сборка сервера;
-- сборка Docker-образа (кроме PR); на тегах `v*` образ публикуется в Docker Hub.
+- сборка Docker-образа (кроме PR); на тегах `v*` образ публикуется в GitHub Container Registry.
 
 Релиз срезается от `master` вручную: Actions → **release** → Run workflow, выбрать `patch`,
 `minor` или `major`. Workflow `.github/workflows/release.yml` берёт последний тег `vX.Y.Z` и
 поднимает выбранную часть, прогоняет те же проверки, что `ci.yml`, публикует образ
-`proshik/pacer:<версия>` и `latest` под `amd64` и `arm64`, затем ставит тег и открывает
+`ghcr.io/proshik/pacer:<версия>` и `latest` под `amd64` и `arm64`, затем ставит тег и открывает
 черновик релиза со списком изменений — текст правится и публикуется руками. Образ публикуется до
-тега, поэтому упавшая публикация не оставляет тега без образа. Нужны секреты репозитория
-`DOCKER_USERNAME` и `DOCKER_ACCESS_TOKEN`: без них workflow останавливается на первом шаге.
+тега, поэтому упавшая публикация не оставляет тега без образа. Секреты не нужны: в GitHub
+Container Registry workflow входит своим `GITHUB_TOKEN`.
 
 Dependabot раз в неделю предлагает обновления Go-модулей, GitHub Actions и базовых образов.
 
