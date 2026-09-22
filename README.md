@@ -49,8 +49,8 @@
 ## Требования
 
 - Go 1.26+
-- TinyGo 0.42+ — нужен только для пересборки браузерного бандла (`brew tap tinygo-org/tools`,
-  `brew trust --formula tinygo-org/tools/tinygo`, `brew install tinygo`); образ берёт готовый
+- для пересборки браузерного бандла: на Linux — TinyGo 0.42, на macOS — Docker (`./build.sh` сам
+  запускает TinyGo в Linux-контейнере: только так байты совпадают с CI); образ берёт готовый
   `assets/json.wasm` из репозитория
 - Docker (опционально)
 
@@ -339,8 +339,9 @@ docker run --rm -p 8080:80 \
 2. `TELEGRAM_TOKEN must be set` / `HOST must be set`  
    Аналогично, проверьте `.env` и Run Configuration.
 
-3. `tinygo not found` при `./build.sh`  
-   Установите TinyGo (см. «Требования») или соберите обычным Go: `WASM_COMPILER=go ./build.sh`.
+3. `tinygo not found` или `docker not found` при `./build.sh`  
+   На Linux установите TinyGo, на macOS запустите Docker (см. «Требования»); для проверки без них
+   подойдёт `WASM_COMPILER=go ./build.sh`, но такой бандл не коммитьте.
    TinyGo 0.42 работает с Go от 1.23 до 1.27; после обновления Go может понадобиться обновить и
    TinyGo.
 

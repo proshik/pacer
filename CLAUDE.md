@@ -70,11 +70,14 @@ workflow, поэтому публикация по тегу в `ci.yml` не с�
 публичных модулей этого проекта. Если скачивание модулей падает, добавляй префикс
 `GOPROXY=https://proxy.golang.org,direct` к go-командам.
 
-TinyGo 0.42 установлен 2026-09-22 (без него `./build.sh` печатает подсказку и выходит). Ставится
-из tap'а `tinygo-org/tools`, где доверена только формула:
-`brew tap tinygo-org/tools && brew trust --formula tinygo-org/tools/tinygo && brew install tinygo`.
-TinyGo собирается поверх установленного Go и поддерживает Go 1.23–1.27; после обновления Go до
-1.28 его может понадобиться обновить. Запасной путь без TinyGo — `WASM_COMPILER=go ./build.sh`,
+На macOS `./build.sh` собирает браузерный бандл в контейнере `golang:<toolchain из go.mod>` с
+TinyGo 0.42.0 из deb-пакета, поэтому нужен работающий Docker (здесь — colima). Причина: TinyGo из
+Homebrew на macOS даёт другие байты `json.wasm`, чем TinyGo под Linux, а Linux-сборка (любая
+архитектура) совпадает с CI побайтно — проверено 2026-09-22. На Linux и в CI TinyGo запускается
+напрямую. Локальный TinyGo из Homebrew (установлен 2026-09-22) можно включить через
+`TINYGO_NATIVE=1`, но коммитить его бандл нельзя — проверка свежести в CI упадёт. TinyGo 0.42
+поддерживает Go 1.23–1.27; после перехода на Go 1.28 его может понадобиться обновить
+(`TINYGO_VERSION` в `build.sh` и `tinygo-version` в `ci.yml`). Запасной путь без TinyGo — `WASM_COMPILER=go ./build.sh`,
 но он даёт другой по размеру `json.wasm` (4,5 МБ вместо 0,38 МБ), и коммитить такой бандл не надо.
 
 `node` стоит из Homebrew: `/opt/homebrew/bin/node` (v26). Каталога `~/.nvm/versions` на машине
