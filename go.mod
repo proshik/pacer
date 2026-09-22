@@ -2,6 +2,8 @@ module gorun
 
 go 1.26.0
 
+toolchain go1.26.4
+
 require (
 	github.com/go-telegram/bot v1.25.0
 	github.com/klauspost/compress v1.20.0

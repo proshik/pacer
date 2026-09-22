@@ -230,7 +230,7 @@ curl -X DELETE -H "Authorization: tma $INIT_DATA" http://localhost:8080/api/v1/r
 1. Копирует в `assets/` файл `wasm_exec.js` того же тулчейна, которым собирается бандл: у TinyGo
    и обычного Go эти файлы разные и не взаимозаменяемы.
 2. Собирает `cmd/wasm` в `assets/json.wasm` — код для браузера. По умолчанию на TinyGo: бандл
-   весит 0,93 МБ вместо 4,54 МБ на Go 1.27 (257 КБ вместо 917 КБ после brotli), а ответы
+   весит 0,38 МБ вместо 4,5 МБ на обычном Go, а ответы
    функций совпадают побайтно. `WASM_COMPILER=go ./build.sh` соберёт обычным Go.
 3. Собирает `cmd/calcwasm` в `pkg/wasmcalc/calc.wasm` (`GOOS=wasip1 GOARCH=wasm`,
    `-buildmode=c-shared`) — WASI-reactor для сервера.
