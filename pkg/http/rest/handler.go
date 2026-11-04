@@ -53,6 +53,7 @@ func NewHandler(
 	serveMux.HandleFunc("/api/v1/vdot", handleVDOT)
 	serveMux.HandleFunc("GET /api/v1/card.png", cardImage)
 	serveMux.HandleFunc("/api/v1/me", handleMe(tgToken))
+	serveMux.HandleFunc("POST /api/v1/share", prepareShareHandler(tgToken, t))
 	serveMux.HandleFunc("GET /api/v1/runs", listRunsHandler(tgToken, store))
 	serveMux.HandleFunc("POST /api/v1/runs", saveRunHandler(tgToken, store))
 	serveMux.HandleFunc("DELETE /api/v1/runs/{id}", deleteRunHandler(tgToken, store))

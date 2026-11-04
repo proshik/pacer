@@ -1015,6 +1015,12 @@
                 saveFailed: "Не получилось сохранить расчёт.",
                 saveRejected: "Не получилось сохранить расчёт — проверьте дистанцию и время.",
                 saveOffline: "Не получилось сохранить расчёт — нет связи с сервером.",
+                shareTelegram: "Поделиться",
+                shareTelegramHint: "Отправьте план в выбранный чат Telegram.",
+                sharePreparing: "Готовим план…",
+                shareSent: "План отправлен.",
+                shareNotSent: "План не отправлен.",
+                shareFailed: "Не удалось поделиться. Попробуйте ещё раз.",
                 share: "Скопировать ссылку на расчёт",
                 shareHint: "В ссылке сохраняются дистанция и время.",
                 linkCopied: "Ссылка скопирована.",
@@ -1100,6 +1106,12 @@
                 saveFailed: "Couldn't save the run.",
                 saveRejected: "Couldn't save the run. Check the distance and time.",
                 saveOffline: "Couldn't save the run: no connection to the server.",
+                shareTelegram: "Share",
+                shareTelegramHint: "Send the plan to a Telegram chat you choose.",
+                sharePreparing: "Preparing the plan…",
+                shareSent: "Plan sent.",
+                shareNotSent: "Plan not sent.",
+                shareFailed: "Could not share. Try again.",
                 share: "Copy link to this run",
                 shareHint: "The link keeps the distance and time.",
                 linkCopied: "Link copied.",
@@ -1395,22 +1407,57 @@
         // l — язык того, кто делится: на нём сервер пишет превью ссылки в чате.
         // Страница получателя l не читает и открывается на его собственном языке.
         function shareURL() {
-            const params = new URLSearchParams(location.search);
+            const params = new URLSearchParams();
+            if (shownPlan) {
+                params.set("d", shownPlan.dist);
+                params.set("t", [Math.floor(shownPlan.total / 3600), pad2(Math.floor(shownPlan.total / 60) % 60), pad2(shownPlan.total % 60)].join(":"));
+            }
             params.set("l", language);
-
             return location.origin + location.pathname + "?" + params.toString();
         }
 
+        let sharingWebApp = null;
+        let sharePending = false;
+
         function attachShareButton() {
             const note = byId("shareNote");
-
-            byId("shareButton").addEventListener("click", async function () {
+            const button = byId("shareButton");
+            button.addEventListener("click", async function () {
+                if (!shownPlan || sharePending) return;
+                const canShare = sharingWebApp && typeof sharingWebApp.shareMessage === "function"
+                    && sharingWebApp.isVersionAtLeast("8.0");
+                if (!canShare) {
+                    try {
+                        await navigator.clipboard.writeText(shareURL());
+                        setText(note, "linkCopied");
+                    } catch {
+                        setText(note, "copyFailed");
+                    }
+                    return;
+                }
+                const plan = {...shownPlan};
+                const sharedLanguage = language;
+                sharePending = true;
+                button.disabled = true;
+                setText(note, "sharePreparing");
+                const finish = (key) => {
+                    sharePending = false;
+                    button.disabled = false;
+                    setText(note, key);
+                };
                 try {
-                    await navigator.clipboard.writeText(shareURL());
-                    setText(note, "linkCopied");
-                } catch (error) {
-                    setText(note, "copyFailed");
-                    console.error(error);
+                    const response = await fetch("/api/v1/share", {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json", Authorization: "tma " + telegramLaunch.get("tgWebAppData")},
+                        body: JSON.stringify({distance: plan.dist, time_seconds: plan.total, language: sharedLanguage}),
+                        signal: AbortSignal.timeout(15000)
+                    });
+                    if (!response.ok) throw new Error("prepare failed");
+                    const prepared = await response.json();
+                    if (typeof prepared.id !== "string" || !prepared.id) throw new Error("missing message id");
+                    sharingWebApp.shareMessage(prepared.id, sent => finish(sent ? "shareSent" : "shareNotSent"));
+                } catch {
+                    finish("shareFailed");
                 }
             });
         }
@@ -2180,6 +2227,11 @@
                 return;
             }
 
+            sharingWebApp = webApp;
+            if (typeof webApp.shareMessage === "function" && webApp.isVersionAtLeast("8.0")) {
+                setText(byId("shareButton"), "shareTelegram");
+                setText(byId("shareNote"), "shareTelegramHint");
+            }
             webApp.ready();
             webApp.expand();
             applyTelegramTheme(webApp.themeParams);

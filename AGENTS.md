@@ -79,9 +79,9 @@ workflow, поэтому публикация по тегу в `ci.yml` не с�
 
 Полный набор проверок перед коммитом повторяет `.github/workflows/ci.yml`: `go test -race`,
 `go vet`, golangci-lint v2.13 (через `go run`, см. ниже), `./build.sh` на TinyGo, `go build ./...`.
-Страницу это не покрывает: её проверяют шесть скриптов на Node с headless Chrome —
-`scripts/checks/language.mjs`, `offline.mjs`, `validation.mjs`, `saved-runs.mjs`, `slider.mjs` и
-`startapp.mjs`; все разом —
+Страницу это не покрывает: её проверяют семь скриптов на Node с headless Chrome —
+`scripts/checks/language.mjs`, `offline.mjs`, `validation.mjs`, `saved-runs.mjs`, `slider.mjs`,
+`startapp.mjs` и `share.mjs`; все разом —
 `node scripts/checks/all.mjs`. Нужны Node 22+ (встроенный `WebSocket`) и Chrome; путь к браузеру
 задаёт `CHROME`, каталог страницы — `ASSETS`, а `CHECK_OUT` сохраняет скриншоты вместо
 временного каталога. Как они устроены — в разделе «Проверка страницы без браузерного
@@ -164,7 +164,7 @@ IDE и `go build ./...` не падали с «build constraints exclude all Go 
 | Telegram | `deleteWebhook`, затем long-polling | `setWebhook` на `HOST/<token>` |
 | Роуты | — | вебхук `POST /<TELEGRAM_TOKEN>` |
 
-`/healthz`, раздача статики и API (`/api/v1/time`, `/pace`, `/splits`, `/predict`, `/vdot`, `/me`, `/runs`, `/card.png`) регистрируются в обоих
+`/healthz`, раздача статики и API (`/api/v1/time`, `/pace`, `/splits`, `/predict`, `/vdot`, `/me`, `/runs`, `/card.png`, `/share`) регистрируются в обоих
 режимах — набор роутов больше не зависит от уровня логирования. Хост вебхука обязан быть
 `https` (`buildWebhookURL`), поэтому `DEBUG=false` невозможно проверить на `http://localhost`.
 
@@ -173,7 +173,7 @@ IDE и `go build ./...` не падали с «build constraints exclude all Go 
 Клиент — `github.com/go-telegram/bot` (Bot API 10.3, без зависимостей).
 
 `telegram.NewService` запускает три горутины под общим `sync.WaitGroup`: диспетчер
-(разводит `startC`/`textC`/`timeC`/`paceC`/`cardC`/`unknownC`/`callbackC` по хендлерам),
+(разводит `startC`/`textC`/`timeC`/`paceC`/`cardC`/`unknownC`/`callbackC`/`inlineC` по хендлерам),
 отправитель (вычитывает `messages` и вызывает `send` у `textReply`, `photoReply` или
 `callbackReply`) и — только в режиме polling — `bot.Start`.
 Все отправки в каналы неблокирующие, с веткой `default:` (drop + warn): при переполнении
@@ -239,6 +239,32 @@ IDE и `go build ./...` не падали с «build constraints exclude all Go 
 
 При успешном входе сервер пишет в debug-лог `mini app sign-in` с `language_code` и признаком
 `signature`: по нему видно, что прислал живой клиент, не трогая сам клиент.
+
+### Inline и подготовленные сообщения Mini App
+
+`InlineQuery` идёт через неблокирующую очередь `inlineC`, общий dispatcher и sender:
+`inlineReply` вызывает `answerInlineQuery`. Свободный запрос разбирает `plan.Parse`, один
+`article` содержит фразу из `card.Caption` и URL-кнопку. Пустой/невалидный запрос, непустой
+offset, отсутствие HTTPS HOST или план вне 1–1000000 м / 1–3600000 с дают `results: []`.
+Ответ персональный, кэш 1 с (язык отправителя). В polling и webhook явно запрошены
+`message`, `callback_query`, `inline_query`, чтобы не наследовать старый allowed_updates. Для запуска владелец включает `/setinline`
+в BotFather. В inline-сообщении нет web_app/callback-кнопок: целевой чат неизвестен.
+
+`POST /api/v1/share` работает в обоих режимах и без истории. `authenticate` проверяет initData
+(24 ч), user_id берётся только из него; JSON строго `{distance,time_seconds,language}`,
+те же границы, `language` ru/en. Вызов `Service.PrepareInlineMessage` ограничен 10 с и
+контекстом HTTP, сохраняет тот же article через `savePreparedInlineMessage` для пользователя,
+групп и каналов (не ботов). Ответ `{id,expiration_date}` и ошибки — `private, no-store`;
+401 auth, 400 ввод, 503 конфигурация, 502 ошибка Telegram. Текст ошибки Telegram не выдавать
+клиенту и не писать в лог: он может содержать детали транспорта.
+
+Кнопка footer использует `shareMessage` только при SDK >=8.0, снимок `shownPlan` и языка
+фиксируется при клике. До callback повторный клик запрещён; успех/отмена/ошибка идут в
+`shareNote` (callback false означает «План не отправлен»: это может быть отмена или сбой SDK). При ошибке нет автоматической отправки/копирования. Без SDK, в старом клиенте
+и браузере сохраняется копирование. `shareURL()` строится заново из shownPlan и языка:
+только d/t/l, без хэша и произвольных параметров. Новые строки есть в обоих словарях;
+визуальный дизайн footer сохранён. `scripts/checks/share.mjs` проверяет этот поток на
+локальной странице с подменой SDK/API, без настоящих Telegram отправок.
 
 ### История расчётов
 

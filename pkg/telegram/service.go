@@ -34,6 +34,7 @@ type Service struct {
 	paceC     chan *models.Update
 	cardC     chan *models.Update
 	unknownC  chan *models.Update
+	inlineC   chan *models.Update
 	callbackC chan *models.Update
 	messages  chan outgoing
 	done      chan struct{}
@@ -51,6 +52,7 @@ func newService() *Service {
 		startC:    make(chan *models.Update, updateQueueSize),
 		textC:     make(chan *models.Update, updateQueueSize),
 		callbackC: make(chan *models.Update, updateQueueSize),
+		inlineC:   make(chan *models.Update, updateQueueSize),
 		timeC:     make(chan *models.Update, updateQueueSize),
 		paceC:     make(chan *models.Update, updateQueueSize),
 		cardC:     make(chan *models.Update, updateQueueSize),
@@ -72,7 +74,7 @@ func NewService(ctx context.Context, debugMode bool, host string, token string) 
 		func(_ context.Context, _ *bot.Bot, update *models.Update) {
 			s.handleUpdate(update)
 		},
-	))
+	), bot.WithAllowedUpdates(bot.AllowedUpdates{"message", "callback_query", "inline_query"}))
 	if err != nil {
 		return nil, fmt.Errorf("create telegram bot api client: %w", err)
 	}
@@ -111,7 +113,7 @@ func NewService(ctx context.Context, debugMode bool, host string, token string) 
 		return nil, fmt.Errorf("build webhook url: %w", err)
 	}
 
-	if _, err := client.SetWebhook(ctx, &bot.SetWebhookParams{URL: webhookURL}); err != nil {
+	if _, err := client.SetWebhook(ctx, &bot.SetWebhookParams{URL: webhookURL, AllowedUpdates: []string{"message", "callback_query", "inline_query"}}); err != nil {
 		return nil, fmt.Errorf("set webhook: %w", err)
 	}
 
@@ -184,6 +186,11 @@ func (s *Service) handleUpdate(update *models.Update) {
 		return
 	}
 
+	if update.InlineQuery != nil {
+		s.enqueueUpdate(s.inlineC, "inline", update)
+		return
+	}
+
 	if update.CallbackQuery != nil {
 		s.enqueueUpdate(s.callbackC, "callback", update)
 		return
@@ -244,6 +251,8 @@ func (s *Service) startDispatcher() {
 				s.enqueueMessage(s.handleStartCmd(u))
 			case u := <-s.textC:
 				s.enqueueMessage(s.handleText(u))
+			case u := <-s.inlineC:
+				s.enqueueMessage(s.handleInline(u))
 			case u := <-s.callbackC:
 				s.enqueueMessage(s.handleCallback(u))
 			case u := <-s.timeC:
