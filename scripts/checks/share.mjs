@@ -105,13 +105,18 @@ try {
         window.copied = []; window.prepared = []; window.sent = [];
         window.oldClient = location.search.includes("old=1");
         window.noSDK = location.search.includes("sdk=off");
-        Object.defineProperty(navigator, "clipboard", {value: {writeText: async value => copied.push(value)}});
+        window.shareOff = location.search.includes("share=off");
+        Object.defineProperty(navigator, "clipboard", {value: {writeText: async value => {
+            if (window.failCopy) throw new Error("expected copy failure");
+            copied.push(value);
+        }}});
         const originalFetch = window.fetch;
         window.fetch = async (url, options = {}) => {
             if (url === "/api/v1/me") return new Response(JSON.stringify({user:{id:42,first_name:"Ann"}}));
             if (url === "/api/v1/runs") return new Response("{}",{status:503});
             if (url === "/api/v1/share") {
                 prepared.push({body:JSON.parse(options.body),auth:options.headers.Authorization});
+                if (window.shareOff) return new Response("{}",{status:503});
                 if (window.failShare) return new Response("{}",{status:502});
                 return new Response(JSON.stringify({id:"prepared-1",expiration_date:1900000000}));
             }
@@ -156,6 +161,25 @@ try {
     await evaluate(`document.querySelector('[data-lang="en"]').click()`);
     check("Mini App share label follows language selection",await evaluate(`document.getElementById("shareButton").textContent === "Share"`));
     await evaluate(`document.querySelector('[data-lang="ru"]').click()`);
+    // 503: sharing is not configured on the server, so the button falls back to copying.
+    await open("/?d=42195&t=3:30:00&share=off#tgWebAppData=fixture");
+    await waitFor(() => evaluate(`document.getElementById("shareButton").textContent === "Поделиться"`), 5000, "share label before 503");
+    await evaluate(`document.getElementById("shareButton").click()`);
+    await waitFor(() => evaluate(`copied.length===1`),5000,"copy after 503");
+    state = await evaluate(`({prepared:prepared.length,sent:sent.length,copied,disabled:document.getElementById("shareButton").disabled,label:document.getElementById("shareButton").textContent,note:document.getElementById("shareNote").textContent})`);
+    check("503 copies a safe plan link in the same click",state.prepared===1 && state.sent===0 && state.copied[0].includes("d=42195") && state.copied[0].includes("t=3%3A30%3A00") && !state.copied[0].includes("#") && !state.copied[0].includes("fixture") && state.note==="Ссылка скопирована." && !state.disabled,state);
+    check("503 returns the button to copying",state.label==="Скопировать ссылку на расчёт",state);
+    await evaluate(`document.getElementById("shareButton").click()`);
+    await waitFor(() => evaluate(`copied.length===2`),5000,"second copy after 503");
+    state = await evaluate(`({prepared:prepared.length,sent:sent.length})`);
+    check("after 503 next clicks copy without asking the server",state.prepared===1 && state.sent===0,state);
+    await evaluate(`document.querySelector('[data-lang="en"]').click()`);
+    check("copy label after 503 follows language selection",await evaluate(`document.getElementById("shareButton").textContent === "Copy link to this run"`));
+    await evaluate(`document.querySelector('[data-lang="ru"]').click()`);
+    check("console clean after 503 fallback",consoleProblems.length===0,consoleProblems);
+    await evaluate(`window.failCopy=true;document.getElementById("shareButton").click()`);
+    await waitFor(() => evaluate(`document.getElementById("shareNote").textContent.startsWith("Не получилось скопировать")`),5000,"copy failure note");
+    check("failed copy is logged to the console",consoleProblems.some((p) => p.includes("expected copy failure")),consoleProblems);
     await open("/?d=10000&t=50:00&old=1#tgWebAppData=fixture");
     check("old client retains the copy label",await evaluate(`document.getElementById("shareButton").textContent.includes("Скопировать")`));
     await evaluate(`document.getElementById("shareButton").click()`);

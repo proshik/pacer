@@ -108,12 +108,35 @@ func TestPrepareInlineMessageBindsUserAndReturnsTelegramID(t *testing.T) {
 		if r.FormValue("user_id") != "42" || r.FormValue("allow_user_chats") != "true" || r.FormValue("allow_group_chats") != "true" || r.FormValue("allow_channel_chats") != "true" || r.FormValue("allow_bot_chats") == "true" {
 			t.Error(r.Form)
 		}
-		var result map[string]any
-		if err := json.Unmarshal([]byte(r.FormValue("result")), &result); err != nil {
+		raw := r.FormValue("result")
+		var result struct {
+			Type                string `json:"type"`
+			InputMessageContent struct {
+				MessageText string `json:"message_text"`
+			} `json:"input_message_content"`
+			ReplyMarkup struct {
+				InlineKeyboard [][]map[string]any `json:"inline_keyboard"`
+			} `json:"reply_markup"`
+		}
+		if err := json.Unmarshal([]byte(raw), &result); err != nil {
 			t.Error(err)
 		}
-		if !strings.Contains(r.FormValue("result"), "Марафон за 3:30:00") {
-			t.Error(result)
+		if result.Type != "article" {
+			t.Errorf("result type %q, want article: %s", result.Type, raw)
+		}
+		if want := "Марафон за 3:30:00 — это 4:59 на километр"; result.InputMessageContent.MessageText != want {
+			t.Errorf("message text %q, want %q", result.InputMessageContent.MessageText, want)
+		}
+		keyboard := result.ReplyMarkup.InlineKeyboard
+		if len(keyboard) != 1 || len(keyboard[0]) != 1 {
+			t.Fatalf("want one URL button: %s", raw)
+		}
+		button := keyboard[0][0]
+		if button["url"] != "https://pacer.example.com/?d=42195&t=3:30:00&l=ru" {
+			t.Errorf("button url %v", button["url"])
+		}
+		if strings.Contains(raw, "web_app") || strings.Contains(raw, "callback_data") {
+			t.Errorf("prepared message must carry only a URL button: %s", raw)
 		}
 		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":"prepared-1","expiration_date":1900000000}}`))
 	}))

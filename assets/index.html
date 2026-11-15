@@ -1418,31 +1418,44 @@
 
         let sharingWebApp = null;
         let sharePending = false;
+        // 503 от /api/v1/share значит, что на сервере шаринг не настроен (нет
+        // https HOST или бота). До перезагрузки кнопка снова копирует ссылку.
+        let shareUnavailable = false;
+
+        async function copyShareLink(note, url) {
+            try {
+                await navigator.clipboard.writeText(url);
+                setText(note, "linkCopied");
+            } catch (error) {
+                setText(note, "copyFailed");
+                console.error(error);
+            }
+        }
 
         function attachShareButton() {
             const note = byId("shareNote");
             const button = byId("shareButton");
             button.addEventListener("click", async function () {
                 if (!shownPlan || sharePending) return;
-                const canShare = sharingWebApp && typeof sharingWebApp.shareMessage === "function"
+                const canShare = !shareUnavailable && sharingWebApp
+                    && typeof sharingWebApp.shareMessage === "function"
                     && sharingWebApp.isVersionAtLeast("8.0");
                 if (!canShare) {
-                    try {
-                        await navigator.clipboard.writeText(shareURL());
-                        setText(note, "linkCopied");
-                    } catch {
-                        setText(note, "copyFailed");
-                    }
+                    await copyShareLink(note, shareURL());
                     return;
                 }
                 const plan = {...shownPlan};
                 const sharedLanguage = language;
+                const fallbackURL = shareURL();
                 sharePending = true;
                 button.disabled = true;
                 setText(note, "sharePreparing");
-                const finish = (key) => {
+                const release = () => {
                     sharePending = false;
                     button.disabled = false;
+                };
+                const finish = (key) => {
+                    release();
                     setText(note, key);
                 };
                 try {
@@ -1452,6 +1465,14 @@
                         body: JSON.stringify({distance: plan.dist, time_seconds: plan.total, language: sharedLanguage}),
                         signal: AbortSignal.timeout(15000)
                     });
+                    if (response.status === 503) {
+                        shareUnavailable = true;
+                        setText(button, "share");
+                        setText(note, "shareHint");
+                        await copyShareLink(note, fallbackURL);
+                        release();
+                        return;
+                    }
                     if (!response.ok) throw new Error("prepare failed");
                     const prepared = await response.json();
                     if (typeof prepared.id !== "string" || !prepared.id) throw new Error("missing message id");
