@@ -35,4 +35,17 @@ func TestWriteSampleCards(t *testing.T) {
 		}
 		t.Log("wrote", name)
 	}
+
+	for _, language := range []string{"ru", "en"} {
+		data, err := Greeting(language)
+		if err != nil {
+			t.Fatalf("draw the %s greeting: %v", language, err)
+		}
+
+		name := filepath.Join(dir, "greeting-"+language+".png")
+		if err := os.WriteFile(name, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		t.Log("wrote", name)
+	}
 }
