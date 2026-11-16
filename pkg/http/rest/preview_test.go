@@ -20,11 +20,11 @@ const previewPage = `<!doctype html><html><head>
     <!-- og:end -->
 </head><body><h1 id="planLine"></h1></body></html>`
 
-func newPreviewHandler(t *testing.T, page string) *http.ServeMux {
+func newPreviewHandler(t *testing.T, page string) http.Handler {
 	t.Helper()
 
 	assets := fstest.MapFS{"assets/index.html": &fstest.MapFile{Data: []byte(page)}}
-	handler, err := NewHandler(true, "token", "pacer.example.com", nil, calculator.NewService(), nil, assets)
+	handler, err := NewHandler(true, "token", "pacer.example.com", nil, calculator.NewService(), nil, nil, assets)
 	if err != nil {
 		t.Fatalf("create handler: %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"gorun/pkg/calculator"
 	"gorun/pkg/history"
 	"gorun/pkg/http/rest"
+	"gorun/pkg/metrics"
 	"gorun/pkg/telegram"
 	"gorun/pkg/wasmcalc"
 	"log/slog"
@@ -72,6 +73,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	m, metricsServer, err := startMetrics(os.Getenv("METRICS_ADDR"), os.Getenv("KRILL_METRICS_TOKEN"))
+	if err != nil {
+		slog.Error("startup failed", "err", err)
+		os.Exit(1)
+	}
+
 	engineName := os.Getenv("CALC_ENGINE")
 	c, closeEngine, err := newCalculationEngine(engineName)
 	if err != nil {
@@ -80,7 +87,7 @@ func main() {
 	}
 	slog.Info("calculation engine selected", "engine", cmp.Or(strings.ToLower(strings.TrimSpace(engineName)), "native"))
 
-	t, err := telegram.NewService(context.Background(), debug, host, tgToken)
+	t, err := telegram.NewService(context.Background(), debug, host, tgToken, m)
 	if err != nil {
 		slog.Error("telegram service init failed", "err", err)
 		os.Exit(1)
@@ -93,7 +100,7 @@ func main() {
 	}
 	slog.Info("saved runs history", "enabled", store != nil)
 
-	handler, err := rest.NewHandler(debug, tgToken, host, t, c, store, assets)
+	handler, err := rest.NewHandler(debug, tgToken, host, t, c, store, m, assets)
 	if err != nil {
 		slog.Error("http handler init failed", "err", err)
 		os.Exit(1)
@@ -134,6 +141,10 @@ func main() {
 		slog.Error("http shutdown failed", "err", err)
 	} else {
 		slog.Info("http server stopped")
+	}
+
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+		slog.Error("metrics server shutdown failed", "err", err)
 	}
 
 	if err := t.Close(shutdownCtx); err != nil {
@@ -181,6 +192,36 @@ func newCalculationEngine(value string) (calculator.Engine, func(context.Context
 	default:
 		return nil, noop, fmt.Errorf("unknown CALC_ENGINE %q, want \"native\" or \"wasm\"", value)
 	}
+}
+
+// startMetrics turns metrics on when METRICS_ADDR is set: it builds the
+// registry and binds the scrape listener. Without the address it returns nils
+// and nothing is listened on, as before metrics existed.
+func startMetrics(addr, token string) (*metrics.Metrics, *metrics.Server, error) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		slog.Info("metrics disabled: METRICS_ADDR is not set")
+		return nil, nil, nil
+	}
+
+	token = strings.TrimSpace(token)
+	if token == "" {
+		slog.Warn("KRILL_METRICS_TOKEN is empty, every scrape is rejected")
+	}
+
+	m, err := metrics.New()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	server, err := m.Listen(addr, token)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	slog.Info("metrics server starting", "addr", server.Addr(), "path", metrics.Path)
+
+	return m, server, nil
 }
 
 // openHistory opens the saved-runs database when DB_PATH is set. Without it the

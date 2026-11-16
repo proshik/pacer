@@ -134,6 +134,7 @@
 - [x] Меню команд бота в Telegram на двух языках.
 - [x] Бот как вход в приложение: планы текстом без команды (`pkg/plan`), ответы с кнопками «Раскладка», «Прогноз», «Карточка», «Открыть в Pacer», кнопка «Открыть Pacer» в `/start`, ссылки `startapp` на странице.
 - [x] Инлайн-режим (`@PacerGoBot марафон 3:30` в любом чате) и `savePreparedInlineMessage` для кнопки «Поделиться» в Mini App.
+- [x] Метрики Prometheus для коллектора Krill: `pkg/metrics`, отдельный листенер `METRICS_ADDR`, Bearer-токен `KRILL_METRICS_TOKEN`; HTTP по шаблону маршрута (вебхук — `/{telegram_token}`), апдейты, ошибки отправки и сбросы очередей бота, операции истории.
 - [x] Бот в стиле страницы, без эмодзи: приветствие в HTML с примерами в `<code>` и именем отправителя, фото приветствия (`card.Greeting`, `file_id` на язык, запасной путь текстом), `setMyDescription`/`setMyShortDescription` на двух языках, аватар и картинка описания для BotFather (`cmd/botfather`, `docs/botfather/`).
 - [ ] Владельцу: загрузить `docs/botfather/avatar.png` (`/setuserpic`) и `description.png` (`/setdescriptionpic`) в @BotFather и проверить приветствие на живом клиенте.
 
@@ -265,3 +266,10 @@
   бота на ru/en ставятся на старте; аватар и картинка описания для BotFather рисуются
   `go run ./cmd/botfather`. Эмодзи нет — это проверяет тест. Race/vet/golangci-lint/go build —
   PASS; живой Telegram — UNVERIFIED, без прод-токена.
+- 2026-11-17: Метрики Prometheus (ветка `prometheus-metrics`, `client_golang` одобрен
+  владельцем): свой реестр в `pkg/metrics` с коллекторами Go и процесса, листенер на
+  `METRICS_ADDR` отдельно от публичного порта, `GET /metrics` только с
+  `Authorization: Bearer $KRILL_METRICS_TOKEN` (constant-time, пустой токен — 401). HTTP
+  считается по шаблону маршрута, путь вебхука с токеном в метки не попадает — на это есть тест.
+  Race/vet/golangci-lint/go build — PASS; живой запуск обработчиков и листенера с `curl` — PASS;
+  сбор в Krill — UNVERIFIED до выкладки.

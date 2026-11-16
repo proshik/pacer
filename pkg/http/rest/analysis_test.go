@@ -30,7 +30,7 @@ func nearSeconds(got int, want int, tolerance int) bool {
 }
 
 // expectValidationError asserts a 400 whose details name field with message.
-func expectValidationError(t *testing.T, handler *http.ServeMux, path string, field string, message string) {
+func expectValidationError(t *testing.T, handler http.Handler, path string, field string, message string) {
 	t.Helper()
 
 	request := httptest.NewRequest(http.MethodGet, path, nil)

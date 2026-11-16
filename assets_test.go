@@ -16,7 +16,7 @@ import (
 // messenger with its plan in og:title. Without them the server would quietly
 // serve the static tags and every preview would read "Pacer".
 func TestSharedLinkPreviewShowsThePlan(t *testing.T) {
-	handler, err := rest.NewHandler(true, "", "pacer.example.com", nil, calculator.NewService(), nil, assets)
+	handler, err := rest.NewHandler(true, "", "pacer.example.com", nil, calculator.NewService(), nil, nil, assets)
 	if err != nil {
 		t.Fatalf("build handler: %v", err)
 	}
@@ -39,7 +39,7 @@ var localLink = regexp.MustCompile(`(?:href|src)="([^"#:/][^"#:]*)"`)
 // accepts. Types are checked on the real handler over the real embedded files:
 // the Alpine image has no mime.types, only Go's built-in table.
 func TestEmbeddedPageAssetsAreServed(t *testing.T) {
-	handler, err := rest.NewHandler(true, "", "pacer.example.com", nil, calculator.NewService(), nil, assets)
+	handler, err := rest.NewHandler(true, "", "pacer.example.com", nil, calculator.NewService(), nil, nil, assets)
 	if err != nil {
 		t.Fatalf("build handler: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 
 	"gorun/pkg/analysis"
 	"gorun/pkg/history"
+	"gorun/pkg/metrics"
 )
 
 // runsListLimit bounds how many saved runs a single list returns.
@@ -47,7 +48,7 @@ func historyAvailable(w http.ResponseWriter, store *history.Store) bool {
 }
 
 // listRunsHandler GET /api/v1/runs: the signed-in user's saved runs, newest first.
-func listRunsHandler(botToken string, store *history.Store) http.HandlerFunc {
+func listRunsHandler(botToken string, store *history.Store, m *metrics.Metrics) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !historyAvailable(w, store) {
 			return
@@ -58,6 +59,7 @@ func listRunsHandler(botToken string, store *history.Store) http.HandlerFunc {
 		}
 
 		runs, err := store.List(r.Context(), session.User.ID, runsListLimit)
+		m.HistoryOp(metrics.HistoryList, err)
 		if err != nil {
 			slog.Error("list saved runs failed", "err", err)
 			writeJSONError(w, http.StatusInternalServerError, "could not load saved runs", nil)
@@ -77,7 +79,7 @@ func listRunsHandler(botToken string, store *history.Store) http.HandlerFunc {
 }
 
 // saveRunHandler POST /api/v1/runs {"distance": meters, "time_seconds": seconds}
-func saveRunHandler(botToken string, store *history.Store) http.HandlerFunc {
+func saveRunHandler(botToken string, store *history.Store, m *metrics.Metrics) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !historyAvailable(w, store) {
 			return
@@ -107,6 +109,7 @@ func saveRunHandler(botToken string, store *history.Store) http.HandlerFunc {
 
 		finish := time.Duration(request.TimeSeconds) * time.Second
 		run, err := store.Save(r.Context(), session.User.ID, request.Distance, finish, time.Now())
+		m.HistoryOp(metrics.HistorySave, err)
 		if err != nil {
 			slog.Error("save run failed", "err", err)
 			writeJSONError(w, http.StatusInternalServerError, "could not save the run", nil)
@@ -125,7 +128,7 @@ func saveRunHandler(botToken string, store *history.Store) http.HandlerFunc {
 }
 
 // deleteRunHandler DELETE /api/v1/runs/{id}
-func deleteRunHandler(botToken string, store *history.Store) http.HandlerFunc {
+func deleteRunHandler(botToken string, store *history.Store, m *metrics.Metrics) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !historyAvailable(w, store) {
 			return
@@ -141,7 +144,14 @@ func deleteRunHandler(botToken string, store *history.Store) http.HandlerFunc {
 			return
 		}
 
-		switch err := store.Delete(r.Context(), session.User.ID, id); {
+		err = store.Delete(r.Context(), session.User.ID, id)
+		if errors.Is(err, history.ErrNotFound) {
+			m.HistoryOp(metrics.HistoryDelete, nil)
+		} else {
+			m.HistoryOp(metrics.HistoryDelete, err)
+		}
+
+		switch {
 		case err == nil:
 			w.WriteHeader(http.StatusNoContent)
 		case errors.Is(err, history.ErrNotFound):

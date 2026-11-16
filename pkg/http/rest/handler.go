@@ -7,6 +7,7 @@ import (
 	"github.com/klauspost/compress/gzhttp"
 	"gorun/pkg/calculator"
 	"gorun/pkg/history"
+	"gorun/pkg/metrics"
 	"gorun/pkg/telegram"
 	"io"
 	"io/fs"
@@ -32,6 +33,8 @@ type errorResponse struct {
 	Details map[string]string `json:"details,omitempty"`
 }
 
+// NewHandler builds the public HTTP handler. With m set every request is
+// counted by its route pattern; a nil m leaves the mux uninstrumented.
 func NewHandler(
 	debugMode bool,
 	tgToken string,
@@ -39,8 +42,9 @@ func NewHandler(
 	t *telegram.Service,
 	c calculator.Engine,
 	store *history.Store,
+	m *metrics.Metrics,
 	a fs.FS,
-) (*http.ServeMux, error) {
+) (http.Handler, error) {
 	serveMux := http.NewServeMux()
 	serveMux.HandleFunc("/healthz", healthCheck)
 
@@ -54,9 +58,9 @@ func NewHandler(
 	serveMux.HandleFunc("GET /api/v1/card.png", cardImage)
 	serveMux.HandleFunc("/api/v1/me", handleMe(tgToken))
 	serveMux.HandleFunc("POST /api/v1/share", prepareShareHandler(tgToken, t))
-	serveMux.HandleFunc("GET /api/v1/runs", listRunsHandler(tgToken, store))
-	serveMux.HandleFunc("POST /api/v1/runs", saveRunHandler(tgToken, store))
-	serveMux.HandleFunc("DELETE /api/v1/runs/{id}", deleteRunHandler(tgToken, store))
+	serveMux.HandleFunc("GET /api/v1/runs", listRunsHandler(tgToken, store, m))
+	serveMux.HandleFunc("POST /api/v1/runs", saveRunHandler(tgToken, store, m))
+	serveMux.HandleFunc("DELETE /api/v1/runs/{id}", deleteRunHandler(tgToken, store, m))
 
 	if !debugMode {
 		// handle telegram web hook messages
@@ -76,7 +80,11 @@ func NewHandler(
 		serveMux.Handle("GET /{$}", gzhttp.GzipHandler(pageHandler(page, siteURL(host), c)))
 	}
 
-	return serveMux, nil
+	if m == nil {
+		return serveMux, nil
+	}
+
+	return instrument(serveMux, m, tgToken), nil
 }
 
 // calculateTime GET /api/v1/time?pace=4m50s&dist=21095

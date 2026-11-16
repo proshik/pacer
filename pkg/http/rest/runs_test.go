@@ -33,7 +33,7 @@ func signedIn(userID int64) string {
 	return "tma " + signInitData("token", time.Now(), user)
 }
 
-func newHistoryHandler(t *testing.T) *http.ServeMux {
+func newHistoryHandler(t *testing.T) http.Handler {
 	t.Helper()
 
 	store, err := history.Open(filepath.Join(t.TempDir(), "history.db"))
@@ -45,7 +45,7 @@ func newHistoryHandler(t *testing.T) *http.ServeMux {
 	return newTestHandlerWith(t, false, store)
 }
 
-func call(t *testing.T, handler *http.ServeMux, method string, path string, body string, authorization string) *httptest.ResponseRecorder {
+func call(t *testing.T, handler http.Handler, method string, path string, body string, authorization string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	var reader io.Reader
@@ -64,7 +64,7 @@ func call(t *testing.T, handler *http.ServeMux, method string, path string, body
 	return recorder
 }
 
-func saveRun(t *testing.T, handler *http.ServeMux, userID int64, body string) runJSON {
+func saveRun(t *testing.T, handler http.Handler, userID int64, body string) runJSON {
 	t.Helper()
 
 	recorder := call(t, handler, http.MethodPost, "/api/v1/runs", body, signedIn(userID))
@@ -82,7 +82,7 @@ func saveRun(t *testing.T, handler *http.ServeMux, userID int64, body string) ru
 	return created.Run
 }
 
-func listRuns(t *testing.T, handler *http.ServeMux, userID int64) []runJSON {
+func listRuns(t *testing.T, handler http.Handler, userID int64) []runJSON {
 	t.Helper()
 
 	recorder := call(t, handler, http.MethodGet, "/api/v1/runs", "", signedIn(userID))

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,5 +126,38 @@ func TestOpenHistory(t *testing.T) {
 
 	if err := store.Close(); err != nil {
 		t.Errorf("close: %v", err)
+	}
+}
+
+func TestStartMetricsWithoutAddressListensOnNothing(t *testing.T) {
+	for _, addr := range []string{"", "   "} {
+		m, server, err := startMetrics(addr, "secret")
+		if err != nil {
+			t.Fatalf("startMetrics(%q): %v", addr, err)
+		}
+		if m != nil || server != nil {
+			t.Fatalf("startMetrics(%q) = %v, %v; want no metrics and no listener", addr, m, server)
+		}
+	}
+}
+
+func TestStartMetricsListensWhenAddressIsSet(t *testing.T) {
+	m, server, err := startMetrics("127.0.0.1:0", "secret")
+	if err != nil {
+		t.Fatalf("startMetrics: %v", err)
+	}
+	t.Cleanup(func() { _ = server.Shutdown(context.Background()) })
+
+	if m == nil || server == nil {
+		t.Fatal("expected metrics and a listener")
+	}
+
+	response, err := http.Get("http://" + server.Addr() + "/metrics")
+	if err != nil {
+		t.Fatalf("scrape: %v", err)
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("scrape without token: status = %d, want 401", response.StatusCode)
 	}
 }

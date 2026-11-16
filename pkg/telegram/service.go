@@ -13,6 +13,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"gorun/pkg/metrics"
 	"gorun/pkg/plan"
 )
 
@@ -27,6 +28,9 @@ const (
 type Service struct {
 	bot     *bot.Bot
 	siteURL string
+
+	// metrics may be nil: every recording method is a no-op then.
+	metrics *metrics.Metrics
 
 	// greetingPhotos remembers the file_id Telegram gives each greeting
 	// picture, so it is uploaded once per language rather than on every /start.
@@ -52,7 +56,12 @@ type Service struct {
 // newService builds the queues without touching the network, so tests can
 // exercise routing and handlers without a bot client.
 func newService() *Service {
+	return newServiceWithMetrics(nil)
+}
+
+func newServiceWithMetrics(m *metrics.Metrics) *Service {
 	return &Service{
+		metrics:   m,
 		startC:    make(chan *models.Update, updateQueueSize),
 		textC:     make(chan *models.Update, updateQueueSize),
 		callbackC: make(chan *models.Update, updateQueueSize),
@@ -71,9 +80,9 @@ func newService() *Service {
 // NewService connects to Telegram and starts the worker goroutines.
 //
 // In debug mode any webhook is removed and updates are long polled; otherwise
-// a webhook pointing at host is registered.
-func NewService(ctx context.Context, debugMode bool, host string, token string) (*Service, error) {
-	s := newService()
+// a webhook pointing at host is registered. m may be nil.
+func NewService(ctx context.Context, debugMode bool, host string, token string, m *metrics.Metrics) (*Service, error) {
+	s := newServiceWithMetrics(m)
 	s.siteURL = webAppSite(host)
 
 	client, err := bot.New(token, bot.WithDefaultHandler(
@@ -234,6 +243,7 @@ func (s *Service) enqueueUpdate(ch chan *models.Update, source string, update *m
 		return
 	case ch <- update:
 	default:
+		s.metrics.BotDropped(metrics.QueueUpdates)
 		slog.Warn("telegram update dropped: queue is full", "source", source)
 	}
 }
@@ -244,6 +254,7 @@ func (s *Service) enqueueMessage(reply outgoing) {
 		return
 	case s.messages <- reply:
 	default:
+		s.metrics.BotDropped(metrics.QueueOutgoing)
 		slog.Warn("telegram outgoing message dropped: queue is full")
 	}
 }
@@ -258,20 +269,28 @@ func (s *Service) startDispatcher() {
 			case <-s.done:
 				return
 			case u := <-s.startC:
+				s.metrics.BotUpdate(metrics.UpdateMessage)
 				s.enqueueMessage(s.handleStartCmd(u))
 			case u := <-s.textC:
+				s.metrics.BotUpdate(metrics.UpdateMessage)
 				s.enqueueMessage(s.handleText(u))
 			case u := <-s.inlineC:
+				s.metrics.BotUpdate(metrics.UpdateInlineQuery)
 				s.enqueueMessage(s.handleInline(u))
 			case u := <-s.callbackC:
+				s.metrics.BotUpdate(metrics.UpdateCallbackQuery)
 				s.enqueueMessage(s.handleCallback(u))
 			case u := <-s.timeC:
+				s.metrics.BotUpdate(metrics.UpdateMessage)
 				s.enqueueMessage(s.handleTimeCmd(u))
 			case u := <-s.paceC:
+				s.metrics.BotUpdate(metrics.UpdateMessage)
 				s.enqueueMessage(s.handlePaceCmd(u))
 			case u := <-s.cardC:
+				s.metrics.BotUpdate(metrics.UpdateMessage)
 				s.enqueueMessage(s.handleCardCmd(u))
 			case u := <-s.unknownC:
+				s.metrics.BotUpdate(metrics.UpdateMessage)
 				s.enqueueMessage(handleUnknownCmd(u))
 			}
 		}
@@ -290,6 +309,7 @@ func (s *Service) startSender() {
 			case reply := <-s.messages:
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				if err := reply.send(ctx, s.bot); err != nil {
+					s.metrics.BotSendError(replyKind(reply))
 					slog.Error("send telegram reply failed", "err", err)
 				}
 				cancel()
@@ -337,6 +357,24 @@ func buildWebhookURL(host, token string) (string, error) {
 // goroutine does not care which.
 type outgoing interface {
 	send(ctx context.Context, client *bot.Bot) error
+}
+
+// replyKind names a reply for the send error counter.
+func replyKind(reply outgoing) string {
+	switch reply.(type) {
+	case textReply:
+		return "text"
+	case photoReply:
+		return "photo"
+	case greetingReply:
+		return "greeting"
+	case callbackReply:
+		return "callback"
+	case inlineReply:
+		return "inline"
+	default:
+		return "other"
+	}
 }
 
 type textReply struct {

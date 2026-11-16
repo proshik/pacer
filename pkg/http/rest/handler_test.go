@@ -14,13 +14,13 @@ import (
 	"testing/fstest"
 )
 
-func newTestHandler(t *testing.T) *http.ServeMux {
+func newTestHandler(t *testing.T) http.Handler {
 	t.Helper()
 
 	return newTestHandlerWithMode(t, true)
 }
 
-func newTestHandlerWithMode(t *testing.T, debugMode bool) *http.ServeMux {
+func newTestHandlerWithMode(t *testing.T, debugMode bool) http.Handler {
 	t.Helper()
 
 	return newTestHandlerWith(t, debugMode, nil)
@@ -28,7 +28,7 @@ func newTestHandlerWithMode(t *testing.T, debugMode bool) *http.ServeMux {
 
 // newTestHandlerWith builds the handler with the bot token "token"; a nil store
 // leaves the history endpoints unconfigured.
-func newTestHandlerWith(t *testing.T, debugMode bool, store *history.Store) *http.ServeMux {
+func newTestHandlerWith(t *testing.T, debugMode bool, store *history.Store) http.Handler {
 	t.Helper()
 
 	// крупнее MinSize компрессора, иначе сжатие не включится
@@ -38,7 +38,7 @@ func newTestHandlerWith(t *testing.T, debugMode bool, store *history.Store) *htt
 		"assets/index.html": &fstest.MapFile{Data: page},
 	}
 
-	handler, err := NewHandler(debugMode, "token", "pacer.example.com", nil, calculator.NewService(), store, assets)
+	handler, err := NewHandler(debugMode, "token", "pacer.example.com", nil, calculator.NewService(), store, nil, assets)
 	if err != nil {
 		t.Fatalf("create test handler: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestAssetsAreServedPlainWhenGzipNotAccepted(t *testing.T) {
 }
 
 // getJSON issues a GET and decodes the JSON body into target.
-func getJSON(t *testing.T, handler *http.ServeMux, target any, path string) int {
+func getJSON(t *testing.T, handler http.Handler, target any, path string) int {
 	t.Helper()
 
 	request := httptest.NewRequest(http.MethodGet, path, nil)

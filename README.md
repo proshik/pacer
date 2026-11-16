@@ -70,6 +70,34 @@
 - `CALC_ENGINE` (`native` по умолчанию, либо `wasm`) — чем считать темп и время
 - `DB_PATH` — файл SQLite для расчётов, сохранённых в Mini App. Без него история отключена:
   `/api/v1/runs` отвечает `503`, остальное работает. В Docker по умолчанию `/data/pacer.db`
+- `METRICS_ADDR` — адрес отдельного листенера метрик Prometheus, например `:9100`. Метрики
+  отдаются на `GET /metrics` этого адреса, а не на публичном `PORT`. Пусто — метрики выключены и
+  порт не открывается
+- `KRILL_METRICS_TOKEN` — токен коллектора: `/metrics` отвечает только на
+  `Authorization: Bearer <токен>`, сравнение за постоянное время. Пустой токен — `401` на все
+  запросы
+
+### Метрики
+
+С `METRICS_ADDR` сервер отдаёт свой реестр Prometheus (без глобального): коллекторы Go и процесса
+(`go_*`, `process_*`) и метрики pacer.
+
+| Метрика | Метки | Что считает |
+|---|---|---|
+| `pacer_http_requests_total` | `route`, `method`, `code` | запросы к публичному порту |
+| `pacer_http_request_duration_seconds` | `route`, `method` | гистограмма длительности |
+| `pacer_telegram_updates_total` | `type` = `message`, `callback_query`, `inline_query` | апдейты, которые обработал бот |
+| `pacer_telegram_send_errors_total` | `reply` = `text`, `photo`, `greeting`, `callback`, `inline`, `other` | ответы, которые Telegram не принял |
+| `pacer_telegram_dropped_total` | `queue` = `updates`, `outgoing` | сброшенные из-за полной очереди |
+| `pacer_history_operations_total` | `operation` = `list`, `save`, `delete`; `result` = `ok`, `error` | обращения к SQLite истории |
+
+`route` — шаблон маршрута (`/api/v1/runs/{id}`), а не сырой путь; вебхук, чей путь — токен бота,
+записывается как `/{telegram_token}`. Методы вне стандартных — `other`. Идентификаторов
+пользователей, текста планов и токенов в метках нет.
+
+```bash
+curl -H "Authorization: Bearer $KRILL_METRICS_TOKEN" http://localhost:9100/metrics
+```
 
 ### Приоритет источников конфигурации
 
