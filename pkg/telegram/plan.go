@@ -60,7 +60,7 @@ func (s *Service) planCommand(update *models.Update, kind plan.Kind, usage strin
 func (s *Service) handleText(update *models.Update) outgoing {
 	p, err := plan.Parse(update.Message.Text)
 	if err != nil {
-		return s.handleStartCmd(update)
+		return textReply{params: s.greetingMessage(update)}
 	}
 
 	return s.planReply(update.Message.Chat, p, textsFor(update.Message))

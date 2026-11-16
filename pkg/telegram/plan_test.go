@@ -16,15 +16,24 @@ func newSiteService(siteURL string) *Service {
 	return s
 }
 
+// textParams reads the words of a reply. The greeting counts as words: its
+// photo carries them as the caption, and its fallback sends them alone.
 func textParams(t *testing.T, reply outgoing) *bot.SendMessageParams {
 	t.Helper()
 
-	text, ok := reply.(textReply)
-	if !ok {
-		t.Fatalf("expected a text reply, got %T", reply)
+	switch reply := reply.(type) {
+	case textReply:
+		return reply.params
+	case greetingReply:
+		if reply.photo.Caption != reply.text.Text || reply.photo.ReplyMarkup != nil != (reply.text.ReplyMarkup != nil) {
+			t.Fatalf("the greeting photo %+v and its text fallback %+v differ", reply.photo, reply.text)
+		}
+		return reply.text
 	}
 
-	return text.params
+	t.Fatalf("expected a text reply, got %T", reply)
+
+	return nil
 }
 
 func buttonsOf(t *testing.T, markup models.ReplyMarkup) []models.InlineKeyboardButton {

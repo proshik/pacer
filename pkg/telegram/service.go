@@ -28,6 +28,10 @@ type Service struct {
 	bot     *bot.Bot
 	siteURL string
 
+	// greetingPhotos remembers the file_id Telegram gives each greeting
+	// picture, so it is uploaded once per language rather than on every /start.
+	greetingPhotos *photoCache
+
 	startC    chan *models.Update
 	textC     chan *models.Update
 	timeC     chan *models.Update
@@ -59,6 +63,8 @@ func newService() *Service {
 		unknownC:  make(chan *models.Update, updateQueueSize),
 		messages:  make(chan outgoing, messageQueueSize),
 		done:      make(chan struct{}),
+
+		greetingPhotos: newPhotoCache(),
 	}
 }
 
@@ -83,9 +89,13 @@ func NewService(ctx context.Context, debugMode bool, host string, token string) 
 	s.startDispatcher()
 	s.startSender()
 
-	// The menu is a nicety: failing to publish it must not keep the bot down.
+	// The menu and the descriptions are niceties: failing to publish them must
+	// not keep the bot down.
 	if err := publishCommands(ctx, client); err != nil {
 		slog.Warn("publish command menu failed", "err", err)
+	}
+	if err := publishDescriptions(ctx, client); err != nil {
+		slog.Warn("publish bot description failed", "err", err)
 	}
 
 	if debugMode {
@@ -349,16 +359,46 @@ func (r photoReply) send(ctx context.Context, client *bot.Bot) error {
 	return err
 }
 
-// handleStartCmd greets with examples and a button that opens the app.
+// handleStartCmd greets with the greeting picture, the examples under it and
+// a button that opens the app.
 func (s *Service) handleStartCmd(update *models.Update) outgoing {
 	t := textsFor(update.Message)
-	params := &bot.SendMessageParams{ChatID: update.Message.Chat.ID, Text: t.greeting}
+	text := s.greetingMessage(update)
+
+	return greetingReply{
+		photo: &bot.SendPhotoParams{
+			ChatID:      text.ChatID,
+			Caption:     text.Text,
+			ParseMode:   text.ParseMode,
+			ReplyMarkup: text.ReplyMarkup,
+		},
+		text:     text,
+		language: t.language,
+		cache:    s.greetingPhotos,
+	}
+}
+
+// greetingMessage is the greeting in words alone: the answer to a message the
+// bot did not understand, and what /start falls back to without its picture.
+func (s *Service) greetingMessage(update *models.Update) *bot.SendMessageParams {
+	t := textsFor(update.Message)
+
+	var name string
+	if update.Message.From != nil {
+		name = update.Message.From.FirstName
+	}
+
+	params := &bot.SendMessageParams{
+		ChatID:    update.Message.Chat.ID,
+		Text:      t.greeting(name),
+		ParseMode: models.ParseModeHTML,
+	}
 
 	if open, ok := s.siteButton(update.Message.Chat, t.openApp, "/"); ok {
 		params.ReplyMarkup = models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{open}}}
 	}
 
-	return textReply{params: params}
+	return params
 }
 
 func handleUnknownCmd(update *models.Update) outgoing {

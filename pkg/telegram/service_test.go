@@ -50,12 +50,7 @@ func messageText(t *testing.T, reply outgoing) string {
 		t.Fatal("expected an outgoing reply, got nil")
 	}
 
-	text, ok := reply.(textReply)
-	if !ok {
-		t.Fatalf("expected a text reply, got %T", reply)
-	}
-
-	return text.params.Text
+	return textParams(t, reply).Text
 }
 
 // newTestService wires channels and the dispatcher without a bot client;

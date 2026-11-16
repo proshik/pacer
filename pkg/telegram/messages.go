@@ -17,7 +17,6 @@ import (
 // itself comes from pkg/card, which the picture and its caption share.
 type texts struct {
 	language       string // the card and the plan sentence use the same language
-	greeting       string
 	unknownCommand string // %s is the command without its slash
 	emptyArguments string
 	cardFailed     string
@@ -53,6 +52,21 @@ type texts struct {
 	half           string
 	marathon       string
 
+	// the greeting: a title, a line on what the bot does, how to write a plan
+	// with examples, and the commands with theirs
+	greetingTitle   string
+	greetingAbout   string
+	greetingLead    string // %s is the sender's first name
+	greetingAnyone  string // the same without a name
+	greetingExample []example
+	commandsLabel   string
+	greetingCommand []example
+
+	// the bot's profile: the description in an empty chat before /start, and
+	// the line under the bot's name
+	description      string
+	shortDescription string
+
 	// descriptions in the command menu next to the input box
 	startCommand string
 	timeCommand  string
@@ -60,13 +74,14 @@ type texts struct {
 	cardCommand  string
 }
 
+// example is a line of the greeting: what to write, and what it means.
+type example struct {
+	text    string
+	meaning string
+}
+
 var englishTexts = texts{
-	language: "en",
-	greeting: "Running pace calculator\n\n" +
-		"Send a distance and a time, like “marathon 3:30” or “10k 4:50”, and I’ll work out the plan.\n\n" +
-		"/pace 21.1 1:38:48 — pace from distance and time\n" +
-		"/time 4:50 10k — time from pace and distance\n" +
-		"/card marathon 3:30 — the plan as a picture",
+	language:       "en",
 	unknownCommand: "Unknown command: /%s\n\nAvailable commands: /start, /time, /pace, /card",
 	emptyArguments: "This command needs arguments.",
 	cardFailed:     "Couldn't draw the card",
@@ -95,19 +110,33 @@ var englishTexts = texts{
 	decimal:        ".",
 	half:           "Half marathon",
 	marathon:       "Marathon",
-	startCommand:   "How to use the bot",
+	startCommand:   "Examples and the Pacer app",
 	timeCommand:    "Time from pace and distance",
 	paceCommand:    "Pace from distance and time",
 	cardCommand:    "The plan as a picture",
+
+	greetingTitle:  "Pacer — a running calculator",
+	greetingAbout:  "Time and pace for any distance, kilometer splits and a race prediction.",
+	greetingLead:   "%s, send a distance and either the time or the pace — the other one is calculated:",
+	greetingAnyone: "Send a distance and either the time or the pace — the other one is calculated:",
+	greetingExample: []example{
+		{text: "marathon 3:30", meaning: "a finish in 3:30"},
+		{text: "10k 4:50", meaning: "4:50 per kilometer"},
+	},
+	commandsLabel: "Commands:",
+	greetingCommand: []example{
+		{text: "/pace 21.1 1:38:48", meaning: "pace from distance and time"},
+		{text: "/time 4:50 10k", meaning: "time from pace and distance"},
+		{text: "/card marathon 3:30", meaning: "the plan as a picture"},
+	},
+	description: "Running calculator: time and pace for any distance, kilometer splits and a race prediction.\n\n" +
+		"Send a distance and either the time or the pace, like “marathon 3:30” or “10k 4:50”, and the other one is calculated. " +
+		"The full calculator with VDOT opens in the Pacer app.",
+	shortDescription: "Time and pace for any distance, kilometer splits and a race prediction.",
 }
 
 var russianTexts = texts{
-	language: "ru",
-	greeting: "Беговой калькулятор темпа\n\n" +
-		"Напишите дистанцию и время — например «марафон 3:30» или «10k 4:50», — и я посчитаю план.\n\n" +
-		"/pace 21.1 1:38:48 — темп по дистанции и времени\n" +
-		"/time 4:50 10k — время по темпу и дистанции\n" +
-		"/card марафон 3:30 — план картинкой",
+	language:       "ru",
 	unknownCommand: "Неизвестная команда: /%s\n\nДоступные команды: /start, /time, /pace, /card",
 	emptyArguments: "Команде нужны аргументы.",
 	cardFailed:     "Не получилось нарисовать карточку",
@@ -136,10 +165,51 @@ var russianTexts = texts{
 	decimal:        ",",
 	half:           "Полумарафон",
 	marathon:       "Марафон",
-	startCommand:   "Как пользоваться",
+	startCommand:   "Примеры и приложение Pacer",
 	timeCommand:    "Время по темпу и дистанции",
 	paceCommand:    "Темп по дистанции и времени",
-	cardCommand:    "Карточка плана картинкой",
+	cardCommand:    "План картинкой",
+
+	greetingTitle:  "Pacer — беговой калькулятор",
+	greetingAbout:  "Время и темп на любой дистанции, раскладка по километрам и прогноз результата.",
+	greetingLead:   "%s, напишите дистанцию и время или темп — второе посчитается само:",
+	greetingAnyone: "Напишите дистанцию и время или темп — второе посчитается само:",
+	greetingExample: []example{
+		{text: "марафон 3:30", meaning: "финиш за 3:30"},
+		{text: "10k 4:50", meaning: "темп 4:50 на километр"},
+	},
+	commandsLabel: "Команды:",
+	greetingCommand: []example{
+		{text: "/pace 21.1 1:38:48", meaning: "темп по дистанции и времени"},
+		{text: "/time 4:50 10k", meaning: "время по темпу и дистанции"},
+		{text: "/card марафон 3:30", meaning: "план картинкой"},
+	},
+	description: "Беговой калькулятор: время и темп на любой дистанции, раскладка по километрам и прогноз результата.\n\n" +
+		"Напишите дистанцию и время или темп — например «марафон 3:30» или «10k 4:50», — второе посчитается само. " +
+		"Полный калькулятор с VDOT открывается в приложении Pacer.",
+	shortDescription: "Время и темп на любой дистанции, раскладка по километрам и прогноз результата.",
+}
+
+// greeting is the hello in Telegram's HTML: the title in bold, the examples
+// and commands in <code>, which Telegram copies with a tap. The sender's name
+// is the only thing from outside and is escaped.
+func (t *texts) greeting(name string) string {
+	lead := escapeHTML(t.greetingAnyone)
+	if name = strings.TrimSpace(name); name != "" {
+		lead = fmt.Sprintf(escapeHTML(t.greetingLead), escapeHTML(name))
+	}
+
+	lines := []string{"<b>" + escapeHTML(t.greetingTitle) + "</b>", escapeHTML(t.greetingAbout), "", lead}
+	for _, e := range t.greetingExample {
+		lines = append(lines, "<code>"+escapeHTML(e.text)+"</code> — "+escapeHTML(e.meaning))
+	}
+
+	lines = append(lines, "", escapeHTML(t.commandsLabel))
+	for _, e := range t.greetingCommand {
+		lines = append(lines, "<code>"+escapeHTML(e.text)+"</code> — "+escapeHTML(e.meaning))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // problem explains why a request could not be read: what is missing, the
@@ -211,6 +281,36 @@ func publishCommands(ctx context.Context, client *bot.Bot) error {
 		})
 		if err != nil {
 			return fmt.Errorf("set command menu for language %q: %w", menu.language, err)
+		}
+	}
+
+	return nil
+}
+
+// publishDescriptions sets what an empty chat shows before /start and the
+// line under the bot's name, once per language like the command menu.
+func publishDescriptions(ctx context.Context, client *bot.Bot) error {
+	profiles := []struct {
+		language string
+		texts    *texts
+	}{
+		{texts: &englishTexts},
+		{language: "ru", texts: &russianTexts},
+	}
+
+	for _, profile := range profiles {
+		if _, err := client.SetMyDescription(ctx, &bot.SetMyDescriptionParams{
+			Description:  profile.texts.description,
+			LanguageCode: profile.language,
+		}); err != nil {
+			return fmt.Errorf("set description for language %q: %w", profile.language, err)
+		}
+
+		if _, err := client.SetMyShortDescription(ctx, &bot.SetMyShortDescriptionParams{
+			ShortDescription: profile.texts.shortDescription,
+			LanguageCode:     profile.language,
+		}); err != nil {
+			return fmt.Errorf("set short description for language %q: %w", profile.language, err)
 		}
 	}
 
