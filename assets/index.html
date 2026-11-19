@@ -1279,6 +1279,40 @@
             cursor: not-allowed;
         }
 
+        /* ---------- подвал ---------- */
+
+        .colophon {
+            padding-bottom: var(--space-2xl);
+        }
+
+        .colophon-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: var(--space-xs) var(--space-lg);
+            padding-top: var(--space-lg);
+            border-top: var(--hair) solid var(--line);
+            color: var(--muted);
+            font-size: var(--text-sm);
+        }
+
+        .colophon a {
+            color: var(--ink);
+            text-decoration: underline;
+            text-decoration-color: var(--line);
+            text-underline-offset: 3px;
+            transition: text-decoration-color var(--dur-micro) var(--ease);
+        }
+
+        .colophon a:hover {
+            text-decoration-color: currentColor;
+        }
+
+        .colophon a:active {
+            color: var(--muted);
+        }
+
         /* ---------- узкие экраны ---------- */
 
         @media (max-width: 60rem) {
@@ -1510,7 +1544,10 @@
                 share: "Скопировать ссылку на расчёт",
                 shareHint: "В ссылке сохраняются дистанция и время.",
                 linkCopied: "Ссылка скопирована.",
-                copyFailed: "Не получилось скопировать — возьмите ссылку из адресной строки."
+                copyFailed: "Не получилось скопировать — возьмите ссылку из адресной строки.",
+                copyright: "© 2026",
+                author: "proshik",
+                sourceCode: "Исходный код"
             },
             en: {
                 description: "Running calculator: time and pace for any distance, kilometer splits, a race prediction and VDOT.",
@@ -1600,7 +1637,10 @@
                 share: "Copy link to this run",
                 shareHint: "The link keeps the distance and time.",
                 linkCopied: "Link copied.",
-                copyFailed: "Couldn't copy the link. Take it from the address bar."
+                copyFailed: "Couldn't copy the link. Take it from the address bar.",
+                copyright: "© 2026",
+                author: "proshik",
+                sourceCode: "Source code"
             }
         };
 
@@ -3078,5 +3118,11 @@
     </section>
 </main>
 
+<footer class="wrap colophon">
+    <div class="colophon-row">
+        <p><span data-i18n="copyright">© 2026</span> <a href="https://github.com/proshik" data-i18n="author">proshik</a></p>
+        <a href="https://github.com/proshik/pacer" data-i18n="sourceCode">Исходный код</a>
+    </div>
+</footer>
 </body>
 </html>
