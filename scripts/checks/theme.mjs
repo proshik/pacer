@@ -1,7 +1,8 @@
-// Headless Chrome check of the light/dark switch: it follows the system until
-// chosen, flips every token (the band and the road included) against the
-// system theme, remembers the choice, applies it before the page script runs,
-// works before WASM loads and stays out of the Telegram Mini App.
+// Headless Chrome check of the theme switch, which cycles Auto, Light, Dark:
+// Auto follows the system (also on the fly), Light and Dark flip every token
+// (the band, the road and the footer included) against the system theme and
+// are remembered, the choice is applied before the page script runs, the
+// switch works before WASM loads and stays out of the Telegram Mini App.
 // Usage: node scripts/checks/theme.mjs
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -157,6 +158,9 @@ const STATE = `(() => {
         tokens[name] = root.getPropertyValue(name).trim();
     }
     const toggle = document.querySelector(".theme-toggle");
+    const metas = [...document.querySelectorAll('meta[name="theme-color"]')];
+    const active = metas.find((m) => !m.media || matchMedia(m.media).matches);
+    const icons = toggle ? [...toggle.querySelectorAll("svg")].filter((svg) => svg.getBoundingClientRect().width > 0).map((svg) => svg.dataset.icon) : [];
     return {
         theme: document.documentElement.dataset.theme || null,
         tokens,
@@ -164,71 +168,99 @@ const STATE = `(() => {
         paper: getComputedStyle(document.body).backgroundColor,
         strip: getComputedStyle(document.querySelector(".strip")).backgroundColor,
         footer: getComputedStyle(document.querySelector("footer")).backgroundColor,
-        metas: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content),
-        toggle: toggle && {hidden: toggle.hidden, visible: toggle.getBoundingClientRect().width > 0, pressed: toggle.getAttribute("aria-pressed"),
-            label: toggle.getAttribute("aria-label"), disabled: toggle.disabled},
+        metas: metas.map((m) => m.content),
+        media: metas.map((m) => m.media),
+        activeMeta: active && active.content,
+        toggle: toggle && {hidden: toggle.hidden, visible: toggle.getBoundingClientRect().width > 0, mode: toggle.dataset.mode,
+            label: toggle.getAttribute("aria-label"), title: toggle.title, pressed: toggle.getAttribute("aria-pressed"), disabled: toggle.disabled, icons},
         stored: (() => { try { return localStorage.getItem(${JSON.stringify(STORAGE_KEY)}); } catch (e) { return "unavailable"; } })()
     };
 })()`;
 
 const clickToggle = async () => { await evaluate(`document.querySelector(".theme-toggle").click(), true`); await sleep(150); };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const SYSTEM_METAS = [COLORS.light, COLORS.dark];
+const ICON = { auto: "auto", light: "sun", dark: "moon" };
+const NAME = {
+    ru: { auto: "Тема: авто", light: "Тема: светлая", dark: "Тема: тёмная", hint: ", нажмите, чтобы сменить" },
+    en: { auto: "Theme: auto", light: "Theme: light", dark: "Theme: dark", hint: ", click to change" }
+};
+const named = (t, mode, lang = "ru") => t && t.mode === mode && t.label === NAME[lang][mode] && t.title === NAME[lang][mode] + NAME[lang].hint
+    && same(t.icons, [ICON[mode]]) && t.pressed === null;
+const reload = async () => { await send("Page.reload"); await ready(); };
 
 try {
-    // Reference: the system theme with no choice made.
+    // Reference: the system theme in Auto.
     await open({ scheme: "light" });
     const light = await evaluate(STATE);
     await open({ scheme: "dark" });
     const dark = await evaluate(STATE);
     check("reference", "the system themes differ", !same(light.tokens, dark.tokens) && light.paper !== dark.paper && light.strip !== dark.strip && light.footer !== dark.footer, { light, dark });
 
-    // 1. Without a choice the page follows the system and the switch says so.
+    // 1. Without a choice the switch is in Auto and the page follows the system.
     {
-        const s = "system";
-        check(s, "light system: no data-theme, switch shown and not pressed", light.theme === null && light.toggle && light.toggle.visible && light.toggle.pressed === "false", light.toggle);
-        check(s, "dark system: switch pressed", dark.theme === null && dark.toggle && dark.toggle.pressed === "true", dark.toggle);
-        check(s, "switch named in Russian", light.toggle && light.toggle.label === "Тёмная тема", light.toggle);
-        check(s, "meta theme colours follow the system", same(light.metas, [COLORS.light, COLORS.dark]), light.metas);
+        const s = "auto by default";
+        check(s, "light system: Auto, half-filled circle, named in Russian", light.theme === null && light.toggle.visible && named(light.toggle, "auto"), light.toggle);
+        check(s, "dark system: still Auto", dark.theme === null && named(dark.toggle, "auto"), dark.toggle);
+        check(s, "theme-color follows the system", same(light.metas, SYSTEM_METAS) && light.activeMeta === COLORS.light && dark.activeMeta === COLORS.dark, { light: light.metas, dark: dark.activeMeta });
     }
 
-    // 2. Dark against a light system: every token flips, the choice is stored.
+    // 2. The full cycle on a light system: Auto, Light, Dark, Auto; each survives a reload.
     {
-        const s = "dark on a light system";
+        const s = "cycle on a light system";
         await open({ scheme: "light", width: 1440 });
         await clickToggle();
-        const r = await evaluate(STATE);
-        check(s, "data-theme is dark and the switch is pressed", r.theme === "dark" && r.toggle.pressed === "true", r);
-        check(s, "paper, band and road take the dark tokens", same(r.tokens, dark.tokens) && r.paper === dark.paper && r.strip === dark.strip, { r: r.tokens, dark: dark.tokens });
-        check(s, "the footer band takes the dark colour", r.footer === dark.footer && r.footer !== r.paper, { footer: r.footer, dark: dark.footer, paper: r.paper });
-        check(s, "color-scheme is dark", r.scheme === "dark", r.scheme);
-        check(s, "both meta theme colours are dark", same(r.metas, [COLORS.dark, COLORS.dark]), r.metas);
-        check(s, "the choice is stored", r.stored === "dark", r.stored);
+        let r = await evaluate(STATE);
+        check(s, "Auto -> Light: data-theme light, stored, sun", r.theme === "light" && r.stored === "light" && named(r.toggle, "light") && same(r.tokens, light.tokens), r);
+        check(s, "Light pins both theme colours", same(r.metas, [COLORS.light, COLORS.light]) && r.scheme === "light", r.metas);
+        await reload();
+        check(s, "Light survives a reload", named((await evaluate(STATE)).toggle, "light"));
+
+        await clickToggle();
+        r = await evaluate(STATE);
+        check(s, "Light -> Dark: paper, band, road and footer take the dark tokens", r.theme === "dark" && r.stored === "dark" && named(r.toggle, "dark")
+            && same(r.tokens, dark.tokens) && r.paper === dark.paper && r.strip === dark.strip && r.footer === dark.footer, { r: r.tokens, dark: dark.tokens });
+        check(s, "Dark pins both theme colours and the colour scheme", same(r.metas, [COLORS.dark, COLORS.dark]) && r.scheme === "dark", r);
         check(s, "console clean", consoleProblems.length === 0, consoleProblems);
         const { data } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
         writeFileSync(join(SHOTS, "theme-dark-on-light-1440.png"), Buffer.from(data, "base64"));
-
-        await send("Page.reload");
-        await ready();
-        const again = await evaluate(STATE);
-        check(s, "the choice survives a reload", again.theme === "dark" && same(again.tokens, dark.tokens) && again.toggle.pressed === "true", again);
+        await reload();
+        r = await evaluate(STATE);
+        check(s, "Dark survives a reload", r.theme === "dark" && named(r.toggle, "dark") && same(r.tokens, dark.tokens), r);
 
         await clickToggle();
-        const back = await evaluate(STATE);
-        check(s, "a second click returns to light", back.theme === "light" && same(back.tokens, light.tokens) && back.stored === "light", back);
+        r = await evaluate(STATE);
+        check(s, "Dark -> Auto: no data-theme, nothing stored, system colours", r.theme === null && r.stored === null && named(r.toggle, "auto")
+            && same(r.tokens, light.tokens) && same(r.metas, SYSTEM_METAS) && r.activeMeta === COLORS.light, r);
+        await reload();
+        r = await evaluate(STATE);
+        check(s, "Auto survives a reload", r.theme === null && named(r.toggle, "auto"), r);
+
+        // Auto follows a change of the system theme on the fly.
+        await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "dark" }] });
+        await sleep(200);
+        r = await evaluate(STATE);
+        check(s, "in Auto a system switch to dark changes the theme and theme-color", same(r.tokens, dark.tokens) && r.footer === dark.footer && r.activeMeta === COLORS.dark && named(r.toggle, "auto"), r);
+        await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
+        await sleep(200);
+        r = await evaluate(STATE);
+        check(s, "and back to light", same(r.tokens, light.tokens) && r.activeMeta === COLORS.light, r);
     }
 
-    // 3. Light against a dark system.
+    // 3. Against a dark system.
     {
-        const s = "light on a dark system";
+        const s = "cycle on a dark system";
         await open({ scheme: "dark", width: 390 });
         await clickToggle();
         const r = await evaluate(STATE);
-        check(s, "paper, band and road take the light tokens", r.theme === "light" && same(r.tokens, light.tokens) && r.paper === light.paper && r.strip === light.strip, { r: r.tokens, light: light.tokens });
-        check(s, "color-scheme and meta follow", r.scheme === "light" && same(r.metas, [COLORS.light, COLORS.light]), r);
-        check(s, "the footer band takes the light colour", r.footer === light.footer && r.footer !== r.paper, { footer: r.footer, light: light.footer, paper: r.paper });
-        check(s, "switch not pressed", r.toggle.pressed === "false", r.toggle);
+        check(s, "Light takes the light tokens against the system", r.theme === "light" && same(r.tokens, light.tokens) && r.paper === light.paper && r.strip === light.strip && r.footer === light.footer, { r: r.tokens, light: light.tokens });
+        check(s, "color-scheme and theme-color follow", r.scheme === "light" && same(r.metas, [COLORS.light, COLORS.light]), r);
         const { data } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
         writeFileSync(join(SHOTS, "theme-light-on-dark-390.png"), Buffer.from(data, "base64"));
+        await clickToggle();
+        await clickToggle();
+        const back = await evaluate(STATE);
+        check(s, "two more clicks end in Auto with the dark system colours", back.theme === null && named(back.toggle, "auto") && same(back.tokens, dark.tokens), back);
     }
 
     // 4. No flash: the stored theme is on <html> before the page script loads,
@@ -244,9 +276,9 @@ try {
         check(s, "data-theme is set while the page script is still loading", seen.theme === "dark" && !seen.body, seen);
         await waitFor(() => evaluate(`document.readyState !== "loading" && document.body.dataset.state === "loading"`), 10000, "page parsed, WASM held");
         const before = await evaluate(STATE);
-        check(s, "before WASM the switch is shown and enabled", before.toggle.visible && !before.toggle.disabled, before.toggle);
+        check(s, "before WASM the switch is shown, enabled and in Dark", before.toggle.visible && !before.toggle.disabled && before.toggle.mode === "dark", before.toggle);
         await clickToggle();
-        check(s, "before WASM a click switches the theme", (await evaluate(STATE)).theme === "light");
+        check(s, "before WASM a click moves on to Auto", (await evaluate(STATE)).toggle.mode === "auto");
         hold = { wasmExec: null, wasm: null };
         await release();
         await ready();
@@ -257,10 +289,12 @@ try {
     {
         const s = "english";
         await open({ scheme: "light", acceptLanguage: "en-US,en" });
-        check(s, "switch named in English", (await evaluate(STATE)).toggle.label === "Dark theme");
+        check(s, "named in English", named((await evaluate(STATE)).toggle, "auto", "en"), (await evaluate(STATE)).toggle);
+        await clickToggle();
+        check(s, "the English name follows the state", named((await evaluate(STATE)).toggle, "light", "en"), (await evaluate(STATE)).toggle);
         await evaluate(`document.querySelector('.lang-option[data-lang="ru"]').click(), true`);
         await sleep(150);
-        check(s, "the name follows the language switch", (await evaluate(STATE)).toggle.label === "Тёмная тема");
+        check(s, "the name follows the language switch", named((await evaluate(STATE)).toggle, "light", "ru"), (await evaluate(STATE)).toggle);
     }
 
     // 6. Telegram sets the neutrals itself: no switch, the stored choice is ignored.
@@ -276,7 +310,7 @@ try {
         check(s, "console clean", consoleProblems.length === 0, consoleProblems);
     }
 
-    // 7. Without storage the switch still works until a reload.
+    // 7. Without storage the switch still cycles until a reload.
     {
         const s = "no storage";
         const { identifier } = await send("Page.addScriptToEvaluateOnNewDocument", {
@@ -287,8 +321,11 @@ try {
         await send("Page.navigate", { url: `${BASE}/?d=21097&t=1:38:48` });
         await ready();
         await clickToggle();
+        await clickToggle();
         const r = await evaluate(STATE);
-        check(s, "a click switches the theme without storage", r.theme === "dark" && r.stored === "unavailable", r);
+        check(s, "two clicks reach Dark without storage", r.theme === "dark" && r.toggle.mode === "dark" && r.stored === "unavailable", r);
+        await clickToggle();
+        check(s, "and a third returns to Auto", (await evaluate(STATE)).theme === null);
         check(s, "console clean", consoleProblems.length === 0, consoleProblems);
         await send("Page.removeScriptToEvaluateOnNewDocument", { identifier });
     }
