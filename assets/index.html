@@ -984,7 +984,7 @@
                 timeFailed: "Не получилось посчитать время.",
                 splitsByKm: "Раскладка по километрам",
                 splitsBy5km: "Раскладка по 5\u00a0км",
-                splitsNote: "Время от старта, если держать ровный темп. Жёлтая метка — каждые 5\u00a0км.",
+                splitsNote: "Время от старта, если держать ровный темп.",
                 finish: "Финиш",
                 forecast: "Прогноз по этому результату",
                 forecastNote: "Две модели дают вилку: чем дальше дистанция от вашей, тем шире разброс.",
@@ -1029,8 +1029,8 @@
             en: {
                 description: "Running calculator: time and pace for any distance, kilometer splits, a race prediction and VDOT.",
                 language: "Language",
-                lede: "Set the distance and either the time or the pace — the other one is calculated.",
-                greeting: (name) => `${name}, set the distance and either the time or the pace — the other one is calculated.`,
+                lede: "Set the distance and either the time or the pace. Pacer calculates the other one.",
+                greeting: (name) => `${name}, set the distance and either the time or the pace. Pacer calculates the other one.`,
                 planLead: (distance, time) => `${distance} in ${time}`,
                 planPace: (lead, pace) => `${lead}\u00a0— that's\u00a0${pace} per kilometer`,
                 summary: (time, pace) => `Time ${time}, pace ${pace} per kilometer.`,
@@ -1075,7 +1075,7 @@
                 timeFailed: "Couldn't calculate the time.",
                 splitsByKm: "Splits by kilometer",
                 splitsBy5km: "Splits every 5\u00a0km",
-                splitsNote: "Time from the start at an even pace. The yellow mark is every 5\u00a0km.",
+                splitsNote: "Time from the start at an even pace.",
                 finish: "Finish",
                 forecast: "Prediction from this result",
                 forecastNote: "Two models give a range: the further a distance is from yours, the wider it gets.",
@@ -2528,7 +2528,7 @@
 
     <section class="band" aria-labelledby="band-title">
         <h2 id="band-title" data-i18n="splitsByKm">Раскладка по километрам</h2>
-        <p class="section-note" data-i18n="splitsNote">Время от старта, если держать ровный темп. Жёлтая метка — каждые 5 км.</p>
+        <p class="section-note" data-i18n="splitsNote">Время от старта, если держать ровный темп.</p>
         <ol id="splitsList" class="band-list"></ol>
     </section>
 
