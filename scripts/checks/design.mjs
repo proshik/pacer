@@ -122,13 +122,13 @@ await send("Network.enable");
 await send("Fetch.enable", { patterns: [{ urlPattern: "*/api/v1/*" }, { urlPattern: "*telegram.org*" }] });
 
 let prep = 0;
-async function open({ hash = "", width = 390, scheme = "light", acceptLanguage = "ru-RU,ru" }) {
+async function open({ hash = "", width = 390, scheme = "light", acceptLanguage = "ru-RU,ru", runs = null }) {
     await send("Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 Chrome", acceptLanguage });
     await send("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width < 700 });
     await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
     await send("Page.navigate", { url: `${BASE}/index.html?prep=${++prep}` });
     await waitFor(() => evaluate(`document.readyState === "complete"`), 15000, "prep load");
-    await evaluate(`localStorage.clear(), true`);
+    await evaluate(`localStorage.clear(); ${runs ? `localStorage.setItem("pacer.runs", ${JSON.stringify(JSON.stringify(runs))});` : ""} true`);
     consoleProblems = [];
     requests = [];
     await send("Page.navigate", { url: `${BASE}/?d=21097&t=1:38:48${hash}` });
@@ -313,6 +313,38 @@ try {
         f = await evaluate(read);
         check(s, "source code link in English", f.source === "Source code" && f.author === "proshik", f);
         check(s, "copyright range in English ends with the current year", f.text === `${line} Source code`, f);
+    }
+
+    // 4b. Saved runs: rules between the runs, none under the last one, where
+    // the footer band already closes the section.
+    {
+        const s = "saved runs";
+        const two = [
+            { id: "a", distance: 21097, time: { text: "1h38m48s", seconds: 5928 }, saved_at: "2026-09-10T08:00:00Z" },
+            { id: "b", distance: 42195, time: { text: "3h29m0s", seconds: 12540 }, saved_at: "2026-09-02T08:00:00Z" }
+        ];
+        const rules = `[...document.querySelectorAll("#savedList li")].map((li) => {
+            const st = getComputedStyle(li);
+            return st.borderBottomStyle !== "none" && parseFloat(st.borderBottomWidth) > 0;
+        })`;
+        const listBottom = `(() => { const st = getComputedStyle(document.getElementById("savedList")); return st.borderBottomStyle !== "none" && parseFloat(st.borderBottomWidth) > 0; })()`;
+        for (const [width, scheme] of [[1440, "light"], [390, "dark"]]) {
+            await open({ width, scheme, runs: two });
+            let r = await evaluate(rules);
+            check(s, `${width} ${scheme}: a rule between the runs, none under the last`, r.length === 2 && r[0] && !r[1], r);
+            check(s, `${width} ${scheme}: the list itself draws no bottom rule`, !(await evaluate(listBottom)));
+            const footerTop = () => evaluate(`Math.round(document.querySelector("footer").getBoundingClientRect().top + scrollY)`);
+            const before = await footerTop();
+            await evaluate(`document.querySelector("#savedList li .saved-delete").click(), true`);
+            await waitFor(() => evaluate(`document.querySelectorAll("#savedList li").length === 1`), 5000, "one run left");
+            r = await evaluate(rules);
+            check(s, `${width} ${scheme}: after a delete the one run left has no bottom rule`, r.length === 1 && !r[0], r);
+            const one = await footerTop();
+            await evaluate(`document.querySelector("#savedList li .saved-delete").click(), true`);
+            await waitFor(() => evaluate(`document.querySelectorAll("#savedList li").length === 0`), 5000, "no runs left");
+            const none = await footerTop();
+            check(s, `${width} ${scheme}: the footer only moves up as runs go`, before > one && one > none, { before, one, none });
+        }
     }
 
     // 5. The logo leads to the home page; inside the Mini App it keeps the

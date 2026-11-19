@@ -1351,6 +1351,11 @@
             border-bottom: var(--hair) solid var(--line);
         }
 
+        /* Под последней записью линии нет: раздел закрывает полоса подвала. */
+        .saved-list li:last-child {
+            border-bottom: 0;
+        }
+
         .saved-open {
             display: grid;
             gap: var(--bar);
