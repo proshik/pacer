@@ -215,7 +215,8 @@ try {
         check(s, "html lang is ru", r.lang === "ru", r.lang);
         check(s, "plan line in Russian", r.plan === `Полумарафон за 1:25:39${NBSP}— это${NBSP}4:04 на километр`, r.plan);
         check(s, "km uses a decimal comma", r.km === `21,097${NBSP}км`, r.km);
-        check(s, "RU/EN switch with RU pressed", r.options === "RU/EN" && r.pressed === "ru", [r.options, r.pressed]);
+        // Without a stored choice the language is automatic, so "Auto" is pressed.
+        check(s, "Авто/RU/EN switch with Авто pressed", r.options === "Авто/RU/EN" && r.pressed === "auto", [r.options, r.pressed]);
         check(s, "switch sits on the line of the wordmark", r.offset <= 1, r.offset);
         const share = new URL(await evaluate(`shareURL()`));
         check(s, "share link carries the plan and the language", share.searchParams.get("d") === "21097"
@@ -235,7 +236,7 @@ try {
         check(s, "plan line in English", r.plan === `Half marathon in 1:25:39${NBSP}— that's${NBSP}4:04 per kilometer`, r.plan);
         check(s, "km uses a decimal point", r.km === `21.097${NBSP}km`, r.km);
         check(s, "VDOT uses a decimal point", /^\d+\.\d$/.test(r.vdot), r.vdot);
-        check(s, "EN is pressed", r.pressed === "en", r.pressed);
+        check(s, "a detected English keeps Auto pressed", r.pressed === "auto" && r.options === "Auto/RU/EN", [r.options, r.pressed]);
         const share = new URL(await evaluate(`shareURL()`));
         check(s, "share link names English", share.searchParams.get("l") === "en", share.href);
         check(s, "no horizontal scroll", !r.hscroll);
@@ -327,7 +328,77 @@ try {
         }
     }
 
-    // 8. Desktop screenshots for a visual pass.
+    // 8. "Auto" forgets the choice and follows the browser, also on the fly.
+    {
+        const s = "auto";
+        const auto = `(() => { const b = document.querySelector('.lang-option[data-lang="auto"]'); return {title: b.title, label: b.getAttribute("aria-label")}; })()`;
+        await open({ acceptLanguage: "ru-RU,ru", storage: "en" });
+        let r = await evaluate(REPORT);
+        check(s, "a stored choice is pressed", r.lang === "en" && r.pressed === "en", [r.lang, r.pressed]);
+        await clickLang("auto");
+        r = await evaluate(REPORT);
+        check(s, "Auto drops pacer.lang and returns to the browser language", r.lang === "ru" && r.stored === null && r.pressed === "auto", r);
+        const hint = await evaluate(auto);
+        check(s, "Auto names the language it picked", hint.title === "Как в системе (сейчас русский)" && hint.label === hint.title, hint);
+        check(s, "exactly one segment is pressed", (await evaluate(`document.querySelectorAll('.lang-option[aria-pressed="true"]').length`)) === 1);
+        await send("Page.reload");
+        await waitFor(() => evaluate(`document.readyState === "complete" && document.body.dataset.state === "ready"`), 20000, "reload");
+        r = await evaluate(REPORT);
+        check(s, "Auto survives a reload", r.lang === "ru" && r.pressed === "auto" && r.stored === null, r);
+
+        const switchBrowser = (languages) => evaluate(`(() => {
+            Object.defineProperty(navigator, "languages", {configurable: true, get: () => ${JSON.stringify(languages)}});
+            Object.defineProperty(navigator, "language", {configurable: true, get: () => ${JSON.stringify(languages[0])}});
+            window.dispatchEvent(new Event("languagechange"));
+            return true;
+        })()`);
+        await switchBrowser(["en-US", "en"]);
+        await sleep(200);
+        r = await evaluate(REPORT);
+        check(s, "in Auto a languagechange switches the page", r.lang === "en" && r.cyrillic.length === 0 && r.pressed === "auto", r);
+        check(s, "the Auto hint follows", (await evaluate(auto)).title === "Match system (now English)");
+        await clickLang("ru");
+        await switchBrowser(["en-US", "en"]);
+        await sleep(200);
+        r = await evaluate(REPORT);
+        check(s, "after a manual choice a languagechange is ignored", r.lang === "ru" && r.pressed === "ru" && r.stored === "ru", r);
+        checkConsole(s);
+
+        // In the Mini App "Auto" means the Telegram user's language.
+        await open({ acceptLanguage: "ru-RU,ru", hash: telegramHash("en"), storage: "ru" });
+        await clickLang("auto");
+        r = await evaluate(REPORT);
+        check(s, "in the Mini App Auto takes language_code", r.lang === "en" && r.stored === null && r.pressed === "auto", r);
+    }
+
+    // 9. The header stays one row: logo, theme button and three segments.
+    for (const width of [320, 390]) {
+        for (const [acceptLanguage, scheme] of [["ru-RU,ru", "light"], ["en-US,en", "dark"]]) {
+            const s = `header ${width} ${acceptLanguage.slice(0, 2)} ${scheme}`;
+            await open({ acceptLanguage, width, mobile: true, scheme });
+            const h = await evaluate(`(() => {
+                const box = (el) => el.getBoundingClientRect();
+                const logo = box(document.querySelector(".wordmark"));
+                const controls = [...document.querySelectorAll(".theme-toggle, .lang-option")].filter((el) => !el.hidden).map(box);
+                const centre = (b) => (b.top + b.bottom) / 2;
+                const hits = [...document.querySelectorAll(".lang-option")].map((el) => {
+                    const before = getComputedStyle(el, "::before");
+                    return before.content !== "none" ? box(el).height - parseFloat(before.top) - parseFloat(before.bottom) : box(el).height;
+                });
+                return {
+                    oneRow: controls.every((b) => Math.abs(centre(b) - centre(logo)) <= 2),
+                    inside: controls.every((b) => b.right <= document.documentElement.clientWidth - 8) && logo.right < Math.min(...controls.map((b) => b.left)),
+                    hits, hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth
+                };
+            })()`);
+            check(s, "logo, theme button and three segments on one row", h.oneRow && h.inside, h);
+            check(s, "each segment keeps a 44 px tall touch area", h.hits.every((v) => v >= 44), h.hits);
+            check(s, "no horizontal scroll", !h.hscroll);
+            await shot(`header-${width}-${acceptLanguage.slice(0, 2)}-${scheme}`);
+        }
+    }
+
+    // 10. Desktop screenshots for a visual pass.
     {
         await open({ acceptLanguage: "en-US,en", width: 1280, mobile: false });
         check("en desktop", "no horizontal scroll", !(await evaluate(REPORT)).hscroll);
