@@ -162,6 +162,11 @@ try {
     const offline = await evaluate(`({plan: document.getElementById("planLine").textContent, pace: document.getElementById("paceMinuteInput").value + ":" + document.getElementById("paceSecondInput").value})`);
     check("offline: a shared link opens from the cache and calculates", offline.plan.includes("3:44:20") && offline.pace === "5:19", offline);
     check("console clean offline", consoleProblems.length === 0, consoleProblems);
+    const fonts = await evaluate(`document.fonts.ready.then(() => ({
+        loaded: [...new Set([...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family.replace(/"/g, "")))].sort(),
+        failed: [...document.fonts].filter((f) => f.status === "error").length
+    }))`);
+    check("offline: the bundled fonts come from the cache", ["Fira Sans Extra Condensed", "JetBrains Mono", "Onest"].every((f) => fonts.loaded.includes(f)) && fonts.failed === 0, fonts);
 
     const { data: shot } = await send("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(SHOTS, "offline-390.png"), Buffer.from(shot, "base64"));
