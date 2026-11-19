@@ -943,8 +943,8 @@
             ru: {
                 description: "Беговой калькулятор: время и темп на любой дистанции, раскладка по километрам, прогноз результата и VDOT.",
                 language: "Язык",
-                lede: "Задайте дистанцию и время или темп — второе посчитается само.",
-                greeting: (name) => `${name}, задайте дистанцию и время или темп — второе посчитается само.`,
+                lede: "Задайте дистанцию и время или темп, и Pacer посчитает второе.",
+                greeting: (name) => `${name}, задайте дистанцию и время или темп, и Pacer посчитает второе.`,
                 planLead: (distance, time) => `${distance} за ${time}`,
                 planPace: (lead, pace) => `${lead}\u00a0— это\u00a0${pace} на километр`,
                 summary: (time, pace) => `Время ${time}, темп ${pace} на километр.`,
@@ -2443,7 +2443,7 @@
             </div>
         </div>
         <h1 id="planLine" class="plan-line">Полумарафон за 1:25:39</h1>
-        <p id="lede" data-i18n="lede">Задайте дистанцию и время или темп — второе посчитается само.</p>
+        <p id="lede" data-i18n="lede">Задайте дистанцию и время или темп, и Pacer посчитает второе.</p>
     </header>
 
     <section class="distance" aria-labelledby="distance-title">
