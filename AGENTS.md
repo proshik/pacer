@@ -549,8 +549,12 @@ inline SVG; имя «Тёмная тема» / «Dark theme» (`darkTheme`) и `
 подчёркиванием, при наведении цвет основного текста. Раньше подвал с линией и текстом списка
 читался как ещё одна строка «Сохранённых расчётов». Полосу, её контраст и отступ проверяет
 `design.mjs`, её цвет при ручной теме — `theme.mjs`. Внутри — строка «© 2020–2026, proshik»: «proshik» ведёт на `https://github.com/proshik`, рядом
-«Исходный код» / «Source code» на `https://github.com/proshik/pacer`. Обе строки — ключи
-`copyright`, `author` и `sourceCode` в обоих словарях. `copyright` — функция года: без аргумента
+знак GitHub (`mark-github-24` из Primer Octicons, MIT; путь взят из репозитория как есть) на
+`https://github.com/proshik/pacer`. Видимого текста у знака нет: SVG 20 px с `fill="currentColor"` и
+`aria-hidden`, имя ссылки — `aria-label` и `title` «Исходный код на GitHub» / «Source code on
+GitHub» (ключ `sourceLink`, `title` переводит `data-i18n-title`). Цель касания 44×44, отрицательные
+поля оставляют строке подвала высоту текста. Строки — ключи `copyright`, `author` и `sourceLink` в
+обоих словарях. `copyright` — функция года: без аргумента
 берёт `new Date().getFullYear()`, так что `applyLanguage()` на загрузке ставит текущий год; в 2020
 году диапазона нет. В разметке — `2020–2026`, это подпись без JS; при смене года её стоит
 поправить, проверка требует от разметки только целый диапазон, чтобы 1 января не падала. Ссылки внешние: `assets_test.go` их не

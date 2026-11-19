@@ -163,7 +163,11 @@ const FOOTER_BAND = `(() => {
     const band = __rgb(style.backgroundColor);
     const paper = __rgb(getComputedStyle(document.body).backgroundColor);
     const rect = footer.getBoundingClientRect();
-    const links = [...footer.querySelectorAll("a")];
+    const links = [...footer.querySelectorAll("a")].filter((a) => a.textContent.trim() !== "");
+    const mark = footer.querySelector('a[href="https://github.com/proshik/pacer"]');
+    const markBox = mark && mark.getBoundingClientRect();
+    const markSvg = mark && mark.querySelector("svg");
+    const line = footer.querySelector("p").getBoundingClientRect();
     // The last content of the last shown section, not the section's own padding.
     const shown = (el) => [...el.children].filter((child) => child.getBoundingClientRect().height > 0);
     const section = shown(document.querySelector("main")).pop();
@@ -177,6 +181,15 @@ const FOOTER_BAND = `(() => {
         text: __contrast(__rgb(getComputedStyle(footer.querySelector("p")).color), band),
         links: links.map((a) => __contrast(__rgb(getComputedStyle(a).color), band)),
         underline: links.every((a) => getComputedStyle(a).textDecorationLine.includes("underline")),
+        mark: mark && {
+            name: mark.getAttribute("aria-label"), text: mark.textContent.trim(), svg: Boolean(markSvg),
+            hidden: markSvg && markSvg.getAttribute("aria-hidden"), fill: markSvg && markSvg.querySelector("path").getAttribute("fill") || markSvg && markSvg.getAttribute("fill"),
+            icon: markSvg && Math.round(markSvg.getBoundingClientRect().width),
+            width: Math.round(markBox.width), height: Math.round(markBox.height),
+            centred: Math.abs((markBox.top + markBox.bottom) / 2 - (line.top + line.bottom) / 2) <= 2,
+            contrast: markSvg ? __contrast(__rgb(getComputedStyle(markSvg).color), band) : 0
+        },
+        rowHeight: Math.round(footer.querySelector(".colophon-row").getBoundingClientRect().height),
         gap: Math.round(rect.top - Math.max(...shown(section).map((el) => el.getBoundingClientRect().bottom)))
     };
 })()`;
@@ -280,7 +293,8 @@ try {
             const footer = document.querySelector("footer");
             const author = footer && footer.querySelector('a[href="https://github.com/proshik"]');
             const source = footer && footer.querySelector('a[href="https://github.com/proshik/pacer"]');
-            return {text: footer && footer.innerText.replace(/\\s+/g, " ").trim(), author: author && author.textContent, source: source && source.textContent};
+            return {text: footer && footer.innerText.replace(/\\s+/g, " ").trim(), author: author && author.textContent,
+                source: source && source.getAttribute("aria-label"), title: source && source.getAttribute("title")};
         })()`;
         let f = await evaluate(read);
         check(s, "author links to GitHub", f.author === "proshik", f);
@@ -291,15 +305,19 @@ try {
             check(s, `${scheme}: the footer is a full-width band of its own colour`, b.fullWidth && b.band.join() !== b.paper.join() && b.step >= 1.05, b);
             check(s, `${scheme}: no rule on top of the footer`, !b.rule && !b.innerRule, b);
             check(s, `${scheme}: footer text is smaller than the body text`, b.size < b.bodySize, b);
-            check(s, `${scheme}: footer text and links read on the band`, b.text >= 4.5 && b.links.length === 2 && b.links.every((v) => v >= 4.5) && b.underline, b);
+            check(s, `${scheme}: footer text and links read on the band`, b.text >= 4.5 && b.links.length === 1 && b.links.every((v) => v >= 4.5) && b.underline, b);
+            check(s, `${scheme}: the source link is the GitHub mark, no visible text`, b.mark && b.mark.svg && b.mark.text === "" && b.mark.hidden === "true" && b.mark.fill === "currentColor" && b.mark.icon === 20, b.mark);
+            check(s, `${scheme}: the mark is a 44 px target centred on the line`, b.mark && b.mark.width >= 44 && b.mark.height >= 44 && b.mark.centred, b.mark);
+            check(s, `${scheme}: the mark reads on the band (3:1)`, b.mark && b.mark.contrast >= 3, b.mark);
+            check(s, `${scheme}: the footer row stays one line high`, b.rowHeight <= 24 + 24 + 24, b.rowHeight);
             check(s, `${scheme}: 48 px between the last section and the band`, b.gap === 48, b.gap);
         }
         await open({ width: 390 });
         f = await evaluate(read);
-        check(s, "source code link in Russian", f.source === "Исходный код", f);
+        check(s, "the GitHub mark is named in Russian", f.source === "Исходный код на GitHub" && f.title === f.source, f);
         const year = await evaluate(`new Date().getFullYear()`);
         const line = year > 2020 ? `© 2020–${year}, proshik` : "© 2020, proshik";
-        check(s, "copyright range ends with the current year", f.text === `${line} Исходный код`, { f, year });
+        check(s, "copyright range ends with the current year", f.text === line, { f, year });
         // The page without JS reads the range from the markup.
         const plain = await evaluate(`fetch("/index.html").then((r) => r.text()).then((html) => {
             const footer = new DOMParser().parseFromString(html, "text/html").querySelector("footer p");
@@ -311,8 +329,8 @@ try {
         await evaluate(`document.querySelector('.lang-option[data-lang="en"]').click(), true`);
         await sleep(200);
         f = await evaluate(read);
-        check(s, "source code link in English", f.source === "Source code" && f.author === "proshik", f);
-        check(s, "copyright range in English ends with the current year", f.text === `${line} Source code`, f);
+        check(s, "the GitHub mark is named in English", f.source === "Source code on GitHub" && f.title === f.source && f.author === "proshik", f);
+        check(s, "copyright range in English ends with the current year", f.text === line, f);
     }
 
     // 4b. Saved runs: rules between the runs, none under the last one, where
@@ -433,6 +451,7 @@ try {
             const band = await evaluate(FOOTER_BAND);
             check(s, "the footer band takes secondary_bg_color and its text reads", band.band.join() === __hex(theme.secondary_bg_color).join()
                 && band.band.join() !== band.paper.join() && band.text >= 4.5 && band.links.every((v) => v >= 4.5), band);
+            check(s, "the GitHub mark reads on the footer band (3:1)", band.mark && band.mark.contrast >= 3, band.mark);
             check(s, "no horizontal scroll", !(await evaluate(`document.documentElement.scrollWidth > document.documentElement.clientWidth`)));
             check(s, "console clean", consoleProblems.length === 0, consoleProblems);
             const { data } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
