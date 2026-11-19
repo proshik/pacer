@@ -80,7 +80,7 @@ func main() {
 	}
 
 	engineName := os.Getenv("CALC_ENGINE")
-	c, closeEngine, err := newCalculationEngine(engineName)
+	c, closeEngine, err := newCalculationEngine(engineName, m)
 	if err != nil {
 		slog.Error("startup failed", "err", err)
 		os.Exit(1)
@@ -92,6 +92,14 @@ func main() {
 		slog.Error("telegram service init failed", "err", err)
 		os.Exit(1)
 	}
+
+	checkInterval, intervalErr := parseWebhookCheckInterval(os.Getenv("TELEGRAM_WEBHOOK_CHECK_INTERVAL"))
+	if intervalErr != nil {
+		slog.Warn("invalid TELEGRAM_WEBHOOK_CHECK_INTERVAL value, fallback to default",
+			"value", os.Getenv("TELEGRAM_WEBHOOK_CHECK_INTERVAL"), "fallback", checkInterval.String())
+	}
+	// Webhook mode with metrics only; polling and no METRICS_ADDR start nothing.
+	t.WatchWebhook(checkInterval)
 
 	store, err := openHistory(os.Getenv("DB_PATH"))
 	if err != nil {
@@ -176,14 +184,14 @@ func main() {
 // through wazero, so server and client cannot drift apart.
 //
 // The returned close function is always safe to call.
-func newCalculationEngine(value string) (calculator.Engine, func(context.Context) error, error) {
+func newCalculationEngine(value string, m *metrics.Metrics) (calculator.Engine, func(context.Context) error, error) {
 	noop := func(context.Context) error { return nil }
 
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "", "native":
 		return calculator.NewService(), noop, nil
 	case "wasm":
-		engine, err := wasmcalc.New(context.Background())
+		engine, err := wasmcalc.New(context.Background(), m)
 		if err != nil {
 			return nil, noop, fmt.Errorf("create wasm calculation engine: %w", err)
 		}
@@ -247,6 +255,26 @@ func requiredEnv(key string) (string, error) {
 	}
 
 	return value, nil
+}
+
+// parseWebhookCheckInterval reads how often the webhook is checked, as a Go
+// duration ("5m", "90s"). Empty means the default; a malformed or
+// non-positive value falls back to the default with an error to warn about.
+func parseWebhookCheckInterval(value string) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return telegram.DefaultWebhookCheckInterval, nil
+	}
+
+	interval, err := time.ParseDuration(value)
+	if err != nil {
+		return telegram.DefaultWebhookCheckInterval, err
+	}
+	if interval <= 0 {
+		return telegram.DefaultWebhookCheckInterval, fmt.Errorf("interval must be positive, got %s", interval)
+	}
+
+	return interval, nil
 }
 
 func parseDebugMode(debugValue string) (bool, error) {

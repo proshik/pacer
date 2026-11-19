@@ -122,6 +122,10 @@ func TestNilMetricsRecordNothing(t *testing.T) {
 	m.BotSendError("text")
 	m.BotDropped(QueueUpdates)
 	m.HistoryOp(HistoryList, nil)
+	m.Error(ComponentCard)
+	m.TelegramMode(true)
+	m.WebhookChecked(true, 1, time.Now())
+	m.WebhookCheckFailed()
 
 	var s *Server
 	if err := s.Shutdown(context.Background()); err != nil {
@@ -188,5 +192,105 @@ func TestListenFailsOnBusyAddress(t *testing.T) {
 
 	if _, err := newMetrics(t).Listen(first.Addr(), "secret"); err == nil {
 		t.Fatal("expected an error listening on a busy address")
+	}
+}
+
+// The error counter is the one place an alert can watch: failures counted by
+// their own metrics also count there, by component, and each component starts
+// at zero so rate() sees the series before the first failure.
+func TestErrorsAreCountedByComponent(t *testing.T) {
+	m := newMetrics(t)
+
+	m.BotSendError("text") // the sender counts it as an error, not this
+	m.Error(ComponentTelegram)
+	m.BotDropped(QueueUpdates)
+	m.BotDropped(QueueOutgoing)
+	m.HistoryOp(HistorySave, errors.New("disk full"))
+	m.HistoryOp(HistoryList, nil)
+	m.WebhookCheckFailed()
+	m.Error(ComponentCard)
+	m.Error("not-a-component")
+
+	body := scrape(t, m.Handler("secret"), "Bearer secret").Body.String()
+
+	if strings.Contains(body, "not-a-component") {
+		t.Fatalf("an arbitrary component became a label:\n%s", body)
+	}
+	for _, want := range []string{
+		`pacer_errors_total{component="telegram"} 2`,
+		`pacer_errors_total{component="queue"} 2`,
+		`pacer_errors_total{component="history"} 1`,
+		`pacer_errors_total{component="card"} 1`,
+		`pacer_errors_total{component="calc"} 0`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("scrape has no %q", want)
+		}
+	}
+}
+
+// Before the first check there is no webhook series at all: polling mode and
+// a check that never succeeded must not read as a webhook that is fine.
+func TestWebhookGaugesAppearWithTheFirstCheck(t *testing.T) {
+	m := newMetrics(t)
+	m.TelegramMode(false)
+
+	body := scrape(t, m.Handler("secret"), "Bearer secret").Body.String()
+	for _, absent := range []string{"pacer_telegram_webhook_ours", "pacer_telegram_webhook_pending_updates", "pacer_telegram_webhook_last_error_timestamp_seconds"} {
+		if strings.Contains(body, absent+" ") {
+			t.Errorf("%s is exported before any check", absent)
+		}
+	}
+	for _, want := range []string{
+		`pacer_telegram_mode{mode="webhook"} 1`,
+		`pacer_telegram_mode{mode="polling"} 0`,
+		`pacer_telegram_webhook_checks_total{result="ok"} 0`,
+		`pacer_telegram_webhook_checks_total{result="error"} 0`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("scrape has no %q", want)
+		}
+	}
+
+	lastError := time.Unix(1763500000, 0)
+	m.WebhookChecked(true, 3, lastError)
+	m.WebhookChecked(false, 0, time.Time{})
+	m.WebhookCheckFailed()
+
+	body = scrape(t, m.Handler("secret"), "Bearer secret").Body.String()
+	for _, want := range []string{
+		"pacer_telegram_webhook_ours 0",
+		"pacer_telegram_webhook_pending_updates 0",
+		"pacer_telegram_webhook_last_error_timestamp_seconds 0",
+		`pacer_telegram_webhook_checks_total{result="ok"} 2`,
+		`pacer_telegram_webhook_checks_total{result="error"} 1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("scrape has no %q", want)
+		}
+	}
+
+	m.WebhookChecked(true, 7, lastError)
+	body = scrape(t, m.Handler("secret"), "Bearer secret").Body.String()
+	for _, want := range []string{
+		"pacer_telegram_webhook_ours 1",
+		"pacer_telegram_webhook_pending_updates 7",
+		"pacer_telegram_webhook_last_error_timestamp_seconds 1.7635e+09",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("scrape has no %q", want)
+		}
+	}
+}
+
+func TestTelegramModeMarksPolling(t *testing.T) {
+	m := newMetrics(t)
+	m.TelegramMode(true)
+
+	body := scrape(t, m.Handler("secret"), "Bearer secret").Body.String()
+	for _, want := range []string{`pacer_telegram_mode{mode="polling"} 1`, `pacer_telegram_mode{mode="webhook"} 0`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("scrape has no %q", want)
+		}
 	}
 }

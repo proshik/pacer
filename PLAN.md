@@ -135,6 +135,7 @@
 - [x] Бот как вход в приложение: планы текстом без команды (`pkg/plan`), ответы с кнопками «Раскладка», «Прогноз», «Карточка», «Открыть в Pacer», кнопка «Открыть Pacer» в `/start`, ссылки `startapp` на странице.
 - [x] Инлайн-режим (`@PacerGoBot марафон 3:30` в любом чате) и `savePreparedInlineMessage` для кнопки «Поделиться» в Mini App.
 - [x] Метрики Prometheus для коллектора Krill: `pkg/metrics`, отдельный листенер `METRICS_ADDR`, Bearer-токен `KRILL_METRICS_TOKEN`; HTTP по шаблону маршрута (вебхук — `/{telegram_token}`), апдейты, ошибки отправки и сбросы очередей бота, операции истории.
+- [x] Метрика состояния вебхука (`getWebhookInfo` раз в 5 мин: наш ли, `pending_update_count`, время последней ошибки доставки, проверки по результату, режим бота) и общий счётчик ошибок `pacer_errors_total{component}` для алертов Grafana; вебхук не снимается при остановке.
 - [x] Бот в стиле страницы, без эмодзи: приветствие в HTML с примерами в `<code>` и именем отправителя, фото приветствия (`card.Greeting`, `file_id` на язык, запасной путь текстом), `setMyDescription`/`setMyShortDescription` на двух языках, аватар и картинка описания для BotFather (`cmd/botfather`, `docs/botfather/`).
 - [ ] Владельцу: загрузить `docs/botfather/avatar.png` (`/setuserpic`) и `description.png` (`/setdescriptionpic`) в @BotFather и проверить приветствие на живом клиенте.
 
@@ -273,3 +274,12 @@
   считается по шаблону маршрута, путь вебхука с токеном в метки не попадает — на это есть тест.
   Race/vet/golangci-lint/go build — PASS; живой запуск обработчиков и листенера с `curl` — PASS;
   сбор в Krill — UNVERIFIED до выкладки.
+- 2026-11-19: Метрики для продуктовых алертов (ветка `webhook-error-metrics`, спека deploy
+  2026-11-18): `Service.WatchWebhook` читает `getWebhookInfo` сразу и раз в
+  `TELEGRAM_WEBHOOK_CHECK_INTERVAL` (5m) в режиме вебхука — `pacer_telegram_webhook_ours`,
+  `_pending_updates`, `_last_error_timestamp_seconds`, `_checks_total{result}`, плюс
+  `pacer_telegram_mode{mode}`; общий `pacer_errors_total{component}` (telegram, queue, history,
+  card, calc). Проверено, что вебхук не снимается при остановке (`Close` его не трогает,
+  `deleteWebhook` — только на старте в debug); на это добавлен тест. Race/vet/golangci-lint/go
+  build — PASS; scrape настоящего листенера с заглушкой Telegram — PASS; живой Telegram и сбор в
+  Krill — UNVERIFIED до выкладки.

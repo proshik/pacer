@@ -349,7 +349,7 @@ locked». Все маршруты `/api/v1/runs` требуют `Authorization: 
 кавычки). Окружение всегда важнее `.env`. `PORT`, `TELEGRAM_TOKEN`, `HOST` обязательны — без
 любого из них процесс завершается; `DEBUG` и `LOG_LEVEL` опциональны (`LOG_LEVEL`
 перекрывает уровень, вытекающий из `DEBUG`). `CALC_ENGINE` выбирает движок расчёта, `DB_PATH` включает историю, `METRICS_ADDR` — листенер метрик,
-`KRILL_METRICS_TOKEN` — его Bearer-токен.
+`KRILL_METRICS_TOKEN` — его Bearer-токен, `TELEGRAM_WEBHOOK_CHECK_INTERVAL` — частоту проверки вебхука.
 
 Пакеты `pkg/...` возвращают ошибки — никаких `panic`/`log.Fatal`; из процесса выходит только
 `main`. Логирование — `log/slog` с key-value атрибутами.
@@ -378,6 +378,24 @@ Krill переименуют переменную на вкладке Metrics, �
 `ok`, база ответила. Значения меток — только фиксированные наборы: новая метка с данными
 пользователя, текстом плана или токеном недопустима. Известные комбинации меток создаются в
 `New()` с нулём, чтобы `rate()` и алерты видели ряд до первого события.
+
+`pacer_errors_total{component}` — общий счётчик ошибок (у Go нет `logback_events_total`): сбой,
+который почувствовал пользователь или вызвал внешний сервис. `BotDropped`, `HistoryOp` с ошибкой
+и `WebhookCheckFailed` увеличивают его сами; отправитель зовёт `Error(ComponentTelegram)` после
+`BotSendError`, кроме безвредных отказов (`harmlessRefusal`: «message is not modified», «query is
+too old» на повторное нажатие кнопки); остальные места зовут `Metrics.Error(metrics.Component...)`
+рядом с логом ошибки. Новый лог ошибки такого рода —
+повод посчитать его здесь; неверный ввод, ушедший клиент и ошибки старта/остановки сюда не
+идут. Алерты строятся только по метрикам, не по логам.
+
+Состояние вебхука проверяет `Service.WatchWebhook` (`pkg/telegram/webhook.go`): `getWebhookInfo`
+сразу и раз в `TELEGRAM_WEBHOOK_CHECK_INTERVAL` (5 мин), только в режиме вебхука и с метриками;
+`Close` его останавливает. Гейджи `pacer_telegram_webhook_*` — векторы без меток, чтобы до
+первой проверки и в polling ряда не было вовсе. Адрес вебхука содержит токен: сравнивается с
+`buildWebhookURL`, но не логируется. Вебхук pacer не снимает ни на остановке, ни при проверке —
+Krill выкатывает `start-first`, и `deleteWebhook` старого контейнера оставил бы бота глухим;
+`deleteWebhook` есть только на старте в debug/polling. Это проверяет сквозной тест `NewService`
+против заглушки Telegram: клиент направляется в неё через `testClientOptions`, вне тестов пустой.
 
 Проверка руками: `METRICS_ADDR=:9100 KRILL_METRICS_TOKEN=... go run .` (нужен настоящий токен бота)
 и `curl -H "Authorization: Bearer ..." localhost:9100/metrics`.
