@@ -115,10 +115,10 @@ var englishTexts = texts{
 	paceCommand:    "Pace from distance and time",
 	cardCommand:    "The plan as a picture",
 
-	greetingTitle:  "Pacer — a running calculator",
+	greetingTitle:  "Pacer, a running calculator",
 	greetingAbout:  "Time and pace for any distance, kilometer splits and a race prediction.",
-	greetingLead:   "%s, send a distance and either the time or the pace — the other one is calculated:",
-	greetingAnyone: "Send a distance and either the time or the pace — the other one is calculated:",
+	greetingLead:   "%s, send a distance and either the time or the pace, and Pacer calculates the other one:",
+	greetingAnyone: "Send a distance and either the time or the pace, and Pacer calculates the other one:",
 	greetingExample: []example{
 		{text: "marathon 3:30", meaning: "a finish in 3:30"},
 		{text: "10k 4:50", meaning: "4:50 per kilometer"},
@@ -130,7 +130,7 @@ var englishTexts = texts{
 		{text: "/card marathon 3:30", meaning: "the plan as a picture"},
 	},
 	description: "Running calculator: time and pace for any distance, kilometer splits and a race prediction.\n\n" +
-		"Send a distance and either the time or the pace, like “marathon 3:30” or “10k 4:50”, and the other one is calculated. " +
+		"Send a distance and either the time or the pace, like “marathon 3:30” or “10k 4:50”, and Pacer calculates the other one. " +
 		"The full calculator with VDOT opens in the Pacer app.",
 	shortDescription: "Time and pace for any distance, kilometer splits and a race prediction.",
 }
