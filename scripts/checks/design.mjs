@@ -277,7 +277,44 @@ try {
         check(s, "copyright range in English ends with the current year", f.text === `${line} Source code`, f);
     }
 
-    // 5. In Telegram the neutrals follow the theme, the band keeps its own colours.
+    // 5. The logo leads to the home page; inside the Mini App it keeps the
+    // launch hash, or the next page would lose the sign-in and the theme.
+    {
+        const s = "logo link";
+        await open({ width: 390 });
+        const read = `(() => {
+            const link = document.querySelector("a.wordmark");
+            if (!link) return null;
+            const style = getComputedStyle(link);
+            return {href: link.getAttribute("href"), url: link.href, label: link.getAttribute("aria-label"),
+                underline: style.textDecorationLine, text: link.textContent.trim()};
+        })()`;
+        let l = await evaluate(read);
+        check(s, "the logo is a link to the site root", l && l.href === "./" && l.url === `${BASE}/`, l);
+        check(s, "the link is named in Russian and is not underlined", l && l.label === "Pacer, на главную" && l.underline === "none" && l.text === "Pacer", l);
+        await evaluate(`document.querySelector('.lang-option[data-lang="en"]').click(), true`);
+        await sleep(200);
+        l = await evaluate(read);
+        check(s, "the link is named in English", l && l.label === "Pacer, home", l);
+
+        const user = JSON.stringify({ id: 7, first_name: "Ann", language_code: "ru" });
+        const initData = new URLSearchParams({ query_id: "AAE", user, auth_date: "1757500000", hash: "0".repeat(64) }).toString();
+        const hash = "#" + new URLSearchParams({ tgWebAppData: initData, tgWebAppVersion: "8.0" }).toString();
+        await open({ width: 390, hash });
+        l = await evaluate(read);
+        check(s, "in the Mini App the link keeps the launch hash", l && l.url === `${BASE}/${hash}`, l);
+        const share = await evaluate(`shareURL()`);
+        check(s, "the share link still has no hash", !share.includes("#") && !share.includes("tgWebAppData"), share);
+        // The page writes the plan back into the address after it loads, so a
+        // marker on the old window tells the new page from the old one.
+        await evaluate(`window.__beforeHome = true, document.querySelector("a.wordmark").click(), true`);
+        await waitFor(() => evaluate(`!window.__beforeHome && document.readyState === "complete" && document.body.dataset.state === "ready"`), 20000, "home page");
+        await waitFor(() => evaluate(`document.getElementById("lede").textContent.startsWith("Ann, ")`), 5000, "greeting");
+        const after = await evaluate(`({hash: location.hash, lede: document.getElementById("lede").textContent})`);
+        check(s, "following it keeps the Mini App sign-in", after.hash === hash && after.lede.startsWith("Ann, "), after);
+    }
+
+    // 6. In Telegram the neutrals follow the theme, the band keeps its own colours.
     const themes = {
         light: { bg_color: "#ffffff", secondary_bg_color: "#f1f1f1", text_color: "#000000", hint_color: "#999999", section_separator_color: "#e7e7e7" },
         dark: { bg_color: "#17212b", secondary_bg_color: "#232e3c", text_color: "#f5f5f5", hint_color: "#708499", section_separator_color: "#111921" }

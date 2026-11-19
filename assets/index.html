@@ -28,6 +28,8 @@
         // подключается только внутри Telegram — в обычном браузере страница не
         // делает ни одного внешнего запроса.
         const telegramLaunch = new URLSearchParams(location.hash.slice(1));
+        // Хэш запуска как есть: ссылка логотипа в Mini App ведёт на главную с ним.
+        const telegramLaunchHash = location.hash;
         const telegramSDK = telegramLaunch.has("tgWebAppData")
             ? new Promise((resolve) => {
                 const script = document.createElement("script");
@@ -342,9 +344,25 @@
             display: inline-flex;
             align-items: center;
             gap: var(--space-sm);
+            border-radius: var(--radius);
             color: var(--ink);
             font: 800 var(--text-2xl)/1 var(--font-display);
             text-transform: uppercase;
+            text-decoration: none;
+            transition: color var(--dur-micro) var(--ease);
+        }
+
+        /* Логотип — ссылка на главную: без подчёркивания, при наведении слово мягче. */
+        .wordmark:hover {
+            color: var(--muted);
+        }
+
+        .wordmark:active {
+            color: var(--line-strong);
+        }
+
+        .wordmark:focus-visible {
+            outline-offset: var(--space-2xs);
         }
 
         .wordmark-icon {
@@ -1470,6 +1488,7 @@
             ru: {
                 description: "Беговой калькулятор: время и темп на любой дистанции, раскладка по километрам, прогноз результата и VDOT.",
                 language: "Язык",
+                home: "Pacer, на главную",
                 lede: "Задайте дистанцию и время или темп, и Pacer посчитает второе.",
                 greeting: (name) => `${name}, задайте дистанцию и время или темп, и Pacer посчитает второе.`,
                 planLead: (distance, time) => `${distance} за ${time}`,
@@ -1564,6 +1583,7 @@
             en: {
                 description: "Running calculator: time and pace for any distance, kilometer splits, a race prediction and VDOT.",
                 language: "Language",
+                home: "Pacer, home",
                 lede: "Set the distance and either the time or the pace. Pacer calculates the other one.",
                 greeting: (name) => `${name}, set the distance and either the time or the pace. Pacer calculates the other one.`,
                 planLead: (distance, time) => `${distance} in ${time}`,
@@ -2960,6 +2980,11 @@
 
             document.querySelector(".presets").addEventListener("scroll", updatePresetFades, {passive: true});
             window.addEventListener("resize", updatePresetFades);
+            // Внутри Mini App переход на голый корень потерял бы tgWebAppData, а с ним
+            // вход и тему. Хэш живёт только в этой навигации, не в ссылках для шаринга.
+            if (telegramLaunch.has("tgWebAppData")) {
+                byId("homeLink").href = "./" + telegramLaunchHash;
+            }
             attachLanguageSwitch();
             applyLanguage();
             updateHeader();
@@ -2974,7 +2999,7 @@
 <body data-state="loading">
 <header class="wrap masthead">
     <div class="masthead-top">
-        <p class="wordmark"><img class="wordmark-icon" src="icon.svg" alt="" width="32" height="32">Pacer</p>
+        <a class="wordmark" id="homeLink" href="./" aria-label="Pacer, на главную" data-i18n-label="home"><img class="wordmark-icon" src="icon.svg" alt="" width="32" height="32">Pacer</a>
         <div class="lang-switch" role="group" aria-label="Язык" data-i18n-label="language">
             <button type="button" class="lang-option" data-lang="ru" lang="ru" title="Русский" aria-pressed="true">RU</button>
             <button type="button" class="lang-option" data-lang="en" lang="en" title="English" aria-pressed="false">EN</button>

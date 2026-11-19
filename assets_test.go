@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"regexp"
 	"strings"
 	"testing"
@@ -76,7 +77,8 @@ func TestEmbeddedPageAssetsAreServed(t *testing.T) {
 	}
 	links := append(localLink.FindAllStringSubmatch(string(page), -1), localURL.FindAllStringSubmatch(string(page), -1)...)
 	for _, match := range links {
-		if _, listed := want["/"+match[1]]; !listed {
+		// "./" (the logo's link home) is the page itself.
+		if _, listed := want[path.Clean("/"+match[1])]; !listed {
 			t.Errorf("index.html links %q, which this test does not check", match[1])
 		}
 	}
