@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"regexp"
 	"strings"
 	"testing"
@@ -34,6 +35,10 @@ func TestSharedLinkPreviewShowsThePlan(t *testing.T) {
 // no scheme, no protocol-relative host, no fragment-only link.
 var localLink = regexp.MustCompile(`(?:href|src)="([^"#:/][^"#:]*)"`)
 
+// localURL matches the same kind of relative path inside a CSS url(), which is
+// how the page reaches its font files.
+var localURL = regexp.MustCompile(`url\("?([^"#:/)][^"#:)]*)"?\)`)
+
 // The page reaches its manifest, icons, service worker and wasm by relative
 // path, so each of them must be embedded and served with a type the browser
 // accepts. Types are checked on the real handler over the real embedded files:
@@ -55,14 +60,25 @@ func TestEmbeddedPageAssetsAreServed(t *testing.T) {
 		"/icon-192.png":         {"image/png"},
 		"/icon-512.png":         {"image/png"},
 		"/apple-touch-icon.png": {"image/png"},
+		// Go's built-in table has no .woff2 and the Alpine image has no
+		// mime.types; FileServer then sniffs the "wOF2" signature, so the
+		// type does not depend on the host the image runs on.
+		"/fonts/fira-sans-extra-condensed-800-cyrillic.woff2": {"font/woff2"},
+		"/fonts/fira-sans-extra-condensed-800-latin.woff2":    {"font/woff2"},
+		"/fonts/onest-cyrillic.woff2":                         {"font/woff2"},
+		"/fonts/onest-latin.woff2":                            {"font/woff2"},
+		"/fonts/jetbrains-mono-500-cyrillic.woff2":            {"font/woff2"},
+		"/fonts/jetbrains-mono-500-latin.woff2":               {"font/woff2"},
 	}
 
 	page, err := fs.ReadFile(assets, "assets/index.html")
 	if err != nil {
 		t.Fatalf("read embedded page: %v", err)
 	}
-	for _, match := range localLink.FindAllStringSubmatch(string(page), -1) {
-		if _, listed := want["/"+match[1]]; !listed {
+	links := append(localLink.FindAllStringSubmatch(string(page), -1), localURL.FindAllStringSubmatch(string(page), -1)...)
+	for _, match := range links {
+		// "./" (the logo's link home) is the page itself.
+		if _, listed := want[path.Clean("/"+match[1])]; !listed {
 			t.Errorf("index.html links %q, which this test does not check", match[1])
 		}
 	}

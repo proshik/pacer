@@ -12,7 +12,13 @@ const SHELL = [
     "icon.svg",
     "icon-192.png",
     "icon-512.png",
-    "apple-touch-icon.png"
+    "apple-touch-icon.png",
+    "fonts/fira-sans-extra-condensed-800-cyrillic.woff2",
+    "fonts/fira-sans-extra-condensed-800-latin.woff2",
+    "fonts/onest-cyrillic.woff2",
+    "fonts/onest-latin.woff2",
+    "fonts/jetbrains-mono-500-cyrillic.woff2",
+    "fonts/jetbrains-mono-500-latin.woff2"
 ];
 
 const scope = new URL("./", self.location);
