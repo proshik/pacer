@@ -55,7 +55,7 @@ func NewHandler(
 	serveMux.HandleFunc("/api/v1/splits", handleSplits)
 	serveMux.HandleFunc("/api/v1/predict", handlePredict)
 	serveMux.HandleFunc("/api/v1/vdot", handleVDOT)
-	serveMux.HandleFunc("GET /api/v1/card.png", cardImage)
+	serveMux.HandleFunc("GET /api/v1/card.png", cardImage(m))
 	serveMux.HandleFunc("/api/v1/me", handleMe(tgToken))
 	serveMux.HandleFunc("POST /api/v1/share", prepareShareHandler(tgToken, t))
 	serveMux.HandleFunc("GET /api/v1/runs", listRunsHandler(tgToken, store, m))

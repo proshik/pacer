@@ -48,6 +48,30 @@ const (
 	ResultError = "error"
 )
 
+// Components of the error counter: what failed, from the user's side or at an
+// outside service. Every value is created at zero.
+const (
+	// ComponentTelegram is a Telegram Bot API call that failed: a reply not
+	// accepted, a webhook check, sharing or the command menu.
+	ComponentTelegram = "telegram"
+	// ComponentQueue is an update or a reply dropped on a full queue.
+	ComponentQueue = "queue"
+	// ComponentHistory is a saved-runs database call that failed.
+	ComponentHistory = "history"
+	// ComponentCard is a plan card or the greeting picture that did not draw.
+	ComponentCard = "card"
+	// ComponentCalc is a calculation the wasm engine could not run.
+	ComponentCalc = "calc"
+)
+
+var components = []string{ComponentTelegram, ComponentQueue, ComponentHistory, ComponentCard, ComponentCalc}
+
+// Telegram modes, the values of the mode label.
+const (
+	ModeWebhook = "webhook"
+	ModePolling = "polling"
+)
+
 // Reply kinds, the values of the reply label of the send error counter.
 var replyKinds = []string{"text", "photo", "greeting", "callback", "inline", "other"}
 
@@ -65,6 +89,18 @@ type Metrics struct {
 	botDropped    *prometheus.CounterVec
 
 	historyOps *prometheus.CounterVec
+
+	failures *prometheus.CounterVec
+
+	botMode *prometheus.GaugeVec
+
+	// The webhook gauges have no labels but are vectors anyway: a vector
+	// shows no series until the first check, so polling mode and a webhook
+	// never checked do not pass for a webhook that is fine or broken.
+	webhookOurs      *prometheus.GaugeVec
+	webhookPending   *prometheus.GaugeVec
+	webhookLastError *prometheus.GaugeVec
+	webhookChecks    *prometheus.CounterVec
 }
 
 // New builds the registry with the Go runtime and process collectors and the
@@ -110,6 +146,41 @@ func New() (*Metrics, error) {
 			Name:      "operations_total",
 			Help:      "Saved-runs database operations by operation and result.",
 		}, []string{"operation", "result"}),
+		failures: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "errors_total",
+			Help:      "Failures a user felt or an outside service caused, by component.",
+		}, []string{"component"}),
+		botMode: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "telegram",
+			Name:      "mode",
+			Help:      "How the bot gets updates: 1 for the active mode, 0 for the other.",
+		}, []string{"mode"}),
+		webhookOurs: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "telegram_webhook",
+			Name:      "ours",
+			Help:      "1 when Telegram's webhook points at this deployment's URL, 0 otherwise. Webhook mode only.",
+		}, nil),
+		webhookPending: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "telegram_webhook",
+			Name:      "pending_updates",
+			Help:      "Updates Telegram holds and has not delivered yet, as of the last check. Webhook mode only.",
+		}, nil),
+		webhookLastError: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "telegram_webhook",
+			Name:      "last_error_timestamp_seconds",
+			Help:      "Unix time of the last failed webhook delivery Telegram reports, 0 when none. Webhook mode only.",
+		}, nil),
+		webhookChecks: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "telegram_webhook",
+			Name:      "checks_total",
+			Help:      "getWebhookInfo calls by result; error means Telegram did not answer.",
+		}, []string{"result"}),
 	}
 
 	for _, collector := range []prometheus.Collector{
@@ -121,6 +192,12 @@ func New() (*Metrics, error) {
 		m.botSendErrors,
 		m.botDropped,
 		m.historyOps,
+		m.failures,
+		m.botMode,
+		m.webhookOurs,
+		m.webhookPending,
+		m.webhookLastError,
+		m.webhookChecks,
 	} {
 		if err := m.registry.Register(collector); err != nil {
 			return nil, fmt.Errorf("register metrics collector: %w", err)
@@ -140,6 +217,12 @@ func New() (*Metrics, error) {
 		for _, result := range []string{ResultOK, ResultError} {
 			m.historyOps.WithLabelValues(operation, result)
 		}
+	}
+	for _, component := range components {
+		m.failures.WithLabelValues(component)
+	}
+	for _, result := range []string{ResultOK, ResultError} {
+		m.webhookChecks.WithLabelValues(result)
 	}
 
 	return m, nil
@@ -172,8 +255,9 @@ func (m *Metrics) BotUpdate(kind string) {
 	m.botUpdates.WithLabelValues(kind).Inc()
 }
 
-// BotSendError counts a reply Telegram rejected. Unknown kinds count as
-// "other", so the label set stays fixed.
+// BotSendError counts a reply Telegram rejected. It does not count in the
+// error counter: the sender does, leaving out refusals that hurt nobody.
+// Unknown kinds count as "other", so the label set stays fixed.
 func (m *Metrics) BotSendError(kind string) {
 	if m == nil {
 		return
@@ -186,18 +270,20 @@ func (m *Metrics) BotSendError(kind string) {
 	m.botSendErrors.WithLabelValues(kind).Inc()
 }
 
-// BotDropped counts an update or reply dropped on a full queue; queue is one
-// of the Queue* constants.
+// BotDropped counts an update or reply dropped on a full queue, and an error
+// of the queue component; queue is one of the Queue* constants.
 func (m *Metrics) BotDropped(queue string) {
 	if m == nil {
 		return
 	}
 
 	m.botDropped.WithLabelValues(queue).Inc()
+	m.failures.WithLabelValues(ComponentQueue).Inc()
 }
 
-// HistoryOp counts a saved-runs database call. A delete of a missing run is
-// ok: the database answered.
+// HistoryOp counts a saved-runs database call, and a failed one as an error
+// of the history component. A delete of a missing run is ok: the database
+// answered.
 func (m *Metrics) HistoryOp(operation string, err error) {
 	if m == nil {
 		return
@@ -206,9 +292,74 @@ func (m *Metrics) HistoryOp(operation string, err error) {
 	result := ResultOK
 	if err != nil {
 		result = ResultError
+		m.failures.WithLabelValues(ComponentHistory).Inc()
 	}
 
 	m.historyOps.WithLabelValues(operation, result).Inc()
+}
+
+// Error counts a failure of component, one of the Component* constants.
+// Callers that already count through BotDropped, HistoryOp or
+// WebhookCheckFailed must not count the same failure again. An unknown
+// component is not counted, so the label set stays fixed.
+func (m *Metrics) Error(component string) {
+	if m == nil || !slices.Contains(components, component) {
+		return
+	}
+
+	m.failures.WithLabelValues(component).Inc()
+}
+
+// TelegramMode marks how the bot gets updates.
+func (m *Metrics) TelegramMode(polling bool) {
+	if m == nil {
+		return
+	}
+
+	active, other := ModeWebhook, ModePolling
+	if polling {
+		active, other = other, active
+	}
+
+	m.botMode.WithLabelValues(active).Set(1)
+	m.botMode.WithLabelValues(other).Set(0)
+}
+
+// WebhookChecked records what getWebhookInfo answered: whether the webhook is
+// this deployment's, how many updates wait in Telegram and when delivery last
+// failed (the zero time when it never did).
+func (m *Metrics) WebhookChecked(ours bool, pending int, lastError time.Time) {
+	if m == nil {
+		return
+	}
+
+	m.webhookChecks.WithLabelValues(ResultOK).Inc()
+
+	if ours {
+		m.webhookOurs.WithLabelValues().Set(1)
+	} else {
+		m.webhookOurs.WithLabelValues().Set(0)
+	}
+
+	m.webhookPending.WithLabelValues().Set(float64(pending))
+
+	lastErrorSeconds := 0.0
+	if !lastError.IsZero() {
+		lastErrorSeconds = float64(lastError.Unix())
+	}
+	m.webhookLastError.WithLabelValues().Set(lastErrorSeconds)
+}
+
+// WebhookCheckFailed counts a getWebhookInfo call Telegram did not answer,
+// and an error of the telegram component. The webhook gauges keep their last
+// values.
+func (m *Metrics) WebhookCheckFailed() {
+	if m == nil {
+		return
+	}
+
+	m.webhookChecks.WithLabelValues(ResultError).Inc()
+	m.failures.WithLabelValues(ComponentTelegram).Inc()
 }
 
 // Handler serves the scrape. Krill's collector always sends

@@ -17,6 +17,10 @@ import (
 	"gorun/pkg/plan"
 )
 
+// testClientOptions lets tests point the client NewService builds at a fake
+// Telegram. It is always empty outside tests.
+var testClientOptions []bot.Option
+
 // Queue sizes. Enqueues are non blocking: when a queue is full the update is
 // dropped with a warning rather than stalling the webhook handler, which must
 // answer Telegram promptly.
@@ -47,8 +51,13 @@ type Service struct {
 	messages  chan outgoing
 	done      chan struct{}
 
+	// webhookURL is the URL this deployment registers with Telegram, empty in
+	// polling mode. It contains the bot token: never log it.
+	webhookURL string
+
 	polling       bool
 	cancelPolling context.CancelFunc
+	cancelWatch   context.CancelFunc
 	stopOnce      sync.Once
 	wg            sync.WaitGroup
 }
@@ -81,15 +90,22 @@ func newServiceWithMetrics(m *metrics.Metrics) *Service {
 //
 // In debug mode any webhook is removed and updates are long polled; otherwise
 // a webhook pointing at host is registered. m may be nil.
+//
+// Nothing here or in Close removes the webhook in webhook mode: under a
+// start-first rollout the old container stops after the new one has set it,
+// and removing it on the way out would leave the bot deaf.
 func NewService(ctx context.Context, debugMode bool, host string, token string, m *metrics.Metrics) (*Service, error) {
 	s := newServiceWithMetrics(m)
 	s.siteURL = webAppSite(host)
 
-	client, err := bot.New(token, bot.WithDefaultHandler(
-		func(_ context.Context, _ *bot.Bot, update *models.Update) {
+	options := append([]bot.Option{
+		bot.WithDefaultHandler(func(_ context.Context, _ *bot.Bot, update *models.Update) {
 			s.handleUpdate(update)
-		},
-	), bot.WithAllowedUpdates(bot.AllowedUpdates{"message", "callback_query", "inline_query"}))
+		}),
+		bot.WithAllowedUpdates(bot.AllowedUpdates{"message", "callback_query", "inline_query"}),
+	}, testClientOptions...)
+
+	client, err := bot.New(token, options...)
 	if err != nil {
 		return nil, fmt.Errorf("create telegram bot api client: %w", err)
 	}
@@ -101,11 +117,15 @@ func NewService(ctx context.Context, debugMode bool, host string, token string, 
 	// The menu and the descriptions are niceties: failing to publish them must
 	// not keep the bot down.
 	if err := publishCommands(ctx, client); err != nil {
+		m.Error(metrics.ComponentTelegram)
 		slog.Warn("publish command menu failed", "err", err)
 	}
 	if err := publishDescriptions(ctx, client); err != nil {
+		m.Error(metrics.ComponentTelegram)
 		slog.Warn("publish bot description failed", "err", err)
 	}
+
+	m.TelegramMode(debugMode)
 
 	if debugMode {
 		if _, err := client.DeleteWebhook(ctx, &bot.DeleteWebhookParams{DropPendingUpdates: true}); err != nil {
@@ -135,6 +155,7 @@ func NewService(ctx context.Context, debugMode bool, host string, token string, 
 	if _, err := client.SetWebhook(ctx, &bot.SetWebhookParams{URL: webhookURL, AllowedUpdates: []string{"message", "callback_query", "inline_query"}}); err != nil {
 		return nil, fmt.Errorf("set webhook: %w", err)
 	}
+	s.webhookURL = webhookURL
 
 	slog.Info("telegram webhook configured", "host", host)
 
@@ -151,6 +172,9 @@ func (s *Service) Close(ctx context.Context) error {
 		close(s.done)
 		if s.cancelPolling != nil {
 			s.cancelPolling()
+		}
+		if s.cancelWatch != nil {
+			s.cancelWatch()
 		}
 	})
 
@@ -310,12 +334,45 @@ func (s *Service) startSender() {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				if err := reply.send(ctx, s.bot); err != nil {
 					s.metrics.BotSendError(replyKind(reply))
+					if !harmlessRefusal(err) {
+						s.metrics.Error(metrics.ComponentTelegram)
+					}
 					slog.Error("send telegram reply failed", "err", err)
 				}
 				cancel()
 			}
 		}
 	}()
+}
+
+// harmlessRefusals are what Telegram answers to a second tap on the same
+// button: the message already shows that view, or the button is from before a
+// restart. The user is no worse off, so these are not failures.
+var harmlessRefusals = []string{"message is not modified", "query is too old"}
+
+// harmlessRefusal reports whether every error in err (a joined error from a
+// callback answers and edits separately) is a harmless refusal.
+func harmlessRefusal(err error) bool {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range joined.Unwrap() {
+			if !harmlessRefusal(e) {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if !errors.Is(err, bot.ErrorBadRequest) {
+		return false
+	}
+	for _, refusal := range harmlessRefusals {
+		if strings.Contains(err.Error(), refusal) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func buildWebhookURL(host, token string) (string, error) {
@@ -413,6 +470,7 @@ func (s *Service) handleStartCmd(update *models.Update) outgoing {
 		text:     text,
 		language: t.language,
 		cache:    s.greetingPhotos,
+		metrics:  s.metrics,
 	}
 }
 

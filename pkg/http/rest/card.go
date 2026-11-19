@@ -5,13 +5,20 @@ import (
 	"net/http"
 
 	"gorun/pkg/card"
+	"gorun/pkg/metrics"
 )
 
 // cardImage GET /api/v1/card.png?d=42195&t=3:44:20&l=ru
 //
 // The plan as a picture: the same link parameters as the page, so a chat or a
 // link preview can show the plan without opening it.
-func cardImage(w http.ResponseWriter, r *http.Request) {
+func cardImage(m *metrics.Metrics) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		serveCard(w, r, m)
+	}
+}
+
+func serveCard(w http.ResponseWriter, r *http.Request, m *metrics.Metrics) {
 	query := r.URL.Query()
 
 	dist, total, ok := parsePlan(query.Get("d"), query.Get("t"))
@@ -29,6 +36,7 @@ func cardImage(w http.ResponseWriter, r *http.Request) {
 		Language: previewLanguage(query.Get("l"), r.Header.Get("Accept-Language")),
 	})
 	if err != nil {
+		m.Error(metrics.ComponentCard)
 		slog.Error("draw card failed", "err", err, "dist", dist, "time", total)
 		writeJSONError(w, http.StatusInternalServerError, "could not draw the card", nil)
 		return

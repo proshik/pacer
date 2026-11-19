@@ -76,6 +76,9 @@
 - `KRILL_METRICS_TOKEN` — токен коллектора: `/metrics` отвечает только на
   `Authorization: Bearer <токен>`, сравнение за постоянное время. Пустой токен — `401` на все
   запросы
+- `TELEGRAM_WEBHOOK_CHECK_INTERVAL` (длительность Go, по умолчанию `5m`) — как часто в режиме
+  вебхука спрашивать Telegram о его состоянии (`getWebhookInfo`). Работает только вместе с
+  `METRICS_ADDR`; кривое или неположительное значение — предупреждение в логе и `5m`
 
 ### Метрики
 
@@ -90,6 +93,33 @@
 | `pacer_telegram_send_errors_total` | `reply` = `text`, `photo`, `greeting`, `callback`, `inline`, `other` | ответы, которые Telegram не принял |
 | `pacer_telegram_dropped_total` | `queue` = `updates`, `outgoing` | сброшенные из-за полной очереди |
 | `pacer_history_operations_total` | `operation` = `list`, `save`, `delete`; `result` = `ok`, `error` | обращения к SQLite истории |
+| `pacer_errors_total` | `component` = `telegram`, `queue`, `history`, `card`, `calc` | сбои, которые почувствовал пользователь или вызвал внешний сервис (ниже) |
+| `pacer_telegram_mode` | `mode` = `webhook`, `polling` | 1 у текущего режима бота, 0 у другого |
+| `pacer_telegram_webhook_ours` | — | 1, если вебхук в Telegram указывает на `HOST/<токен>` этого развёртывания, иначе 0 |
+| `pacer_telegram_webhook_pending_updates` | — | апдейты, которые Telegram держит и ещё не доставил |
+| `pacer_telegram_webhook_last_error_timestamp_seconds` | — | Unix-время последней неудачной доставки по данным Telegram, 0 — ошибок не было |
+| `pacer_telegram_webhook_checks_total` | `result` = `ok`, `error` | вызовы `getWebhookInfo`; `error` — Telegram не ответил |
+
+`pacer_errors_total` — общий счётчик ошибок, аналог `logback_events_total{level="error"}` у
+Spring-приложений. По компонентам: `telegram` — вызов Bot API не удался (ответ не принят, проверка
+вебхука, подготовка сообщения для «Поделиться», меню команд и описания на старте); `queue` —
+апдейт или ответ сброшен на полной очереди; `history` — ошибка SQLite; `card` — не нарисовалась
+карточка плана или картинка приветствия; `calc` — wasm-движок не смог посчитать. Сбои, у которых
+есть свой счётчик (`send_errors`, `dropped`, `history_operations{result="error"}`,
+`webhook_checks{result="error"}`), попадают и сюда. Не считаются: неверный ввод (400), ушедший
+клиент, ошибки старта и остановки (процесс и так завершается), неудачная первая попытка
+картинки приветствия, после которой бот всё же ответил, и безвредные отказы Telegram на повторное
+нажатие кнопки — «message is not modified» и «query is too old» (в `send_errors` они остаются).
+Сбой публикации меню и описаний случается до первого scrape, поэтому ряд сразу начинается с 1 и
+`increase()` его не увидит — это видно только по логу.
+
+Метрики вебхука появляются после первой проверки — сразу после старта и затем раз в
+`TELEGRAM_WEBHOOK_CHECK_INTERVAL`, только в режиме вебхука (`DEBUG=false`) и с `METRICS_ADDR`. В
+режиме polling их нет, режим видно по `pacer_telegram_mode`. «Наш» вебхук сравнивается как URL:
+схема и хост без учёта регистра, порт `:443` можно опустить, путь — точно. Проверка только читает вебхук: pacer
+не ставит его повторно и не снимает ни при проверке, ни при остановке, поэтому выкладка
+`start-first` не оставляет бота глухим. Адрес вебхука содержит токен, поэтому в логи он не
+пишется — только признак `webhook_set`.
 
 `route` — шаблон маршрута (`/api/v1/runs/{id}`), а не сырой путь; вебхук, чей путь — токен бота,
 записывается как `/{telegram_token}`. Методы вне стандартных — `other`. Идентификаторов

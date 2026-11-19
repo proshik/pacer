@@ -2,18 +2,22 @@ package wasmcalc_test
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"gorun/pkg/calculator"
+	"gorun/pkg/metrics"
 	"gorun/pkg/wasmcalc"
 )
 
 func newEngine(t *testing.T) *wasmcalc.Engine {
 	t.Helper()
 
-	engine, err := wasmcalc.New(context.Background())
+	engine, err := wasmcalc.New(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("create wasm engine: %v", err)
 	}
@@ -93,5 +97,39 @@ func TestWasmEngineIsSafeForConcurrentUse(t *testing.T) {
 
 	for message := range errs {
 		t.Fatal(message)
+	}
+}
+
+// A calculation the module cannot run answers zero, which the user sees as a
+// wrong plan: it must show up in the error counter.
+func TestFailedCalculationIsCounted(t *testing.T) {
+	m, err := metrics.New()
+	if err != nil {
+		t.Fatalf("create metrics: %v", err)
+	}
+
+	engine, err := wasmcalc.New(context.Background(), m)
+	if err != nil {
+		t.Fatalf("create wasm engine: %v", err)
+	}
+	// A closed module fails every call.
+	if err := engine.Close(context.Background()); err != nil {
+		t.Fatalf("close wasm engine: %v", err)
+	}
+
+	engine.Time(10000, 5*time.Minute)
+	engine.Pace(10000, 50*time.Minute)
+
+	expected := `
+# HELP pacer_errors_total Failures a user felt or an outside service caused, by component.
+# TYPE pacer_errors_total counter
+pacer_errors_total{component="calc"} 2
+pacer_errors_total{component="card"} 0
+pacer_errors_total{component="history"} 0
+pacer_errors_total{component="queue"} 0
+pacer_errors_total{component="telegram"} 0
+`
+	if err := testutil.GatherAndCompare(m.Gatherer(), strings.NewReader(expected), "pacer_errors_total"); err != nil {
+		t.Fatal(err)
 	}
 }

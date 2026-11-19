@@ -21,6 +21,7 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"gorun/pkg/calculator"
+	"gorun/pkg/metrics"
 )
 
 // calc.wasm is produced by ./build.sh from ./cmd/calcwasm and committed, so a
@@ -40,12 +41,15 @@ type Engine struct {
 	mu       sync.Mutex
 	calcTime api.Function
 	calcPace api.Function
+
+	metrics *metrics.Metrics // may be nil
 }
 
 var _ calculator.Engine = (*Engine)(nil)
 
-// New loads the embedded module in WASI reactor mode.
-func New(ctx context.Context) (*Engine, error) {
+// New loads the embedded module in WASI reactor mode. A failed call counts as
+// an error of the calc component in m, which may be nil.
+func New(ctx context.Context, m *metrics.Metrics) (*Engine, error) {
 	runtime := wazero.NewRuntime(ctx)
 
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, runtime); err != nil {
@@ -70,6 +74,7 @@ func New(ctx context.Context) (*Engine, error) {
 		module:   module,
 		calcTime: module.ExportedFunction("calc_time"),
 		calcPace: module.ExportedFunction("calc_pace"),
+		metrics:  m,
 	}
 
 	if engine.calcTime == nil || engine.calcPace == nil {
@@ -115,11 +120,13 @@ func (e *Engine) callSeconds(fn api.Function, name string, first int, second int
 		api.EncodeI32(int32(second)),
 	)
 	if err != nil {
+		e.metrics.Error(metrics.ComponentCalc)
 		slog.Error("wasm calculation failed", "err", err, "func", name)
 		return 0
 	}
 
 	if len(results) != 1 {
+		e.metrics.Error(metrics.ComponentCalc)
 		slog.Error("wasm calculation returned unexpected result count", "func", name, "count", len(results))
 		return 0
 	}

@@ -81,7 +81,7 @@ func TestNewCalculationEngineSelection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			engine, closeEngine, err := newCalculationEngine(tt.value)
+			engine, closeEngine, err := newCalculationEngine(tt.value, nil)
 
 			if tt.wantError {
 				if err == nil {
@@ -159,5 +159,31 @@ func TestStartMetricsListensWhenAddressIsSet(t *testing.T) {
 	_ = response.Body.Close()
 	if response.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("scrape without token: status = %d, want 401", response.StatusCode)
+	}
+}
+
+func TestParseWebhookCheckInterval(t *testing.T) {
+	tests := []struct {
+		value   string
+		want    time.Duration
+		wantErr bool
+	}{
+		{value: "", want: 5 * time.Minute},
+		{value: "  ", want: 5 * time.Minute},
+		{value: "90s", want: 90 * time.Second},
+		{value: " 10m ", want: 10 * time.Minute},
+		{value: "5", want: 5 * time.Minute, wantErr: true},
+		{value: "soon", want: 5 * time.Minute, wantErr: true},
+		{value: "0s", want: 5 * time.Minute, wantErr: true},
+		{value: "-1m", want: 5 * time.Minute, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			got, err := parseWebhookCheckInterval(tt.value)
+			if got != tt.want || (err != nil) != tt.wantErr {
+				t.Fatalf("parseWebhookCheckInterval(%q) = %v, %v; want %v, error %v", tt.value, got, err, tt.want, tt.wantErr)
+			}
+		})
 	}
 }

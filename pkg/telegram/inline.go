@@ -10,6 +10,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"gorun/pkg/card"
+	"gorun/pkg/metrics"
 	"gorun/pkg/plan"
 )
 
@@ -66,7 +67,13 @@ func (s *Service) PrepareInlineMessage(ctx context.Context, userID int64, p plan
 	if userID <= 0 || !validSharedPlan(p) {
 		return nil, errors.New("invalid shared plan or user")
 	}
-	return s.bot.SavePreparedInlineMessage(ctx, &bot.SavePreparedInlineMessageParams{
+	prepared, err := s.bot.SavePreparedInlineMessage(ctx, &bot.SavePreparedInlineMessageParams{
 		UserID: userID, Result: s.inlinePlan(p, language), AllowUserChats: true, AllowGroupChats: true, AllowChannelChats: true,
 	})
+	// A client that went away is not Telegram's failure; a timeout is.
+	if err != nil && !errors.Is(ctx.Err(), context.Canceled) {
+		s.metrics.Error(metrics.ComponentTelegram)
+	}
+
+	return prepared, err
 }

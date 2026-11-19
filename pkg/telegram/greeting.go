@@ -10,6 +10,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"gorun/pkg/card"
+	"gorun/pkg/metrics"
 )
 
 // greetingPicture draws the greeting picture of a language once per process.
@@ -59,6 +60,7 @@ type greetingReply struct {
 	text     *bot.SendMessageParams
 	language string
 	cache    *photoCache
+	metrics  *metrics.Metrics // may be nil
 }
 
 func (r greetingReply) send(ctx context.Context, client *bot.Bot) error {
@@ -73,6 +75,7 @@ func (r greetingReply) send(ctx context.Context, client *bot.Bot) error {
 	}
 
 	if picture, err := r.picture(); err != nil {
+		r.metrics.Error(metrics.ComponentCard)
 		slog.Warn("draw greeting picture failed", "err", err, "language", r.language)
 	} else {
 		err := r.sendPhoto(ctx, client, &models.InputFileUpload{Filename: "pacer.png", Data: bytes.NewReader(picture)})

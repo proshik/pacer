@@ -16,6 +16,7 @@ import (
 
 	"gorun/pkg/analysis"
 	"gorun/pkg/card"
+	"gorun/pkg/metrics"
 	"gorun/pkg/plan"
 )
 
@@ -178,6 +179,7 @@ func (s *Service) cardPhoto(chatID int64, p plan.Plan, t *texts) (*bot.SendPhoto
 
 	picture, err := card.Render(cardPlan)
 	if err != nil {
+		s.metrics.Error(metrics.ComponentCard)
 		slog.Warn("draw card failed", "err", err, "dist", p.Distance, "time", p.Time)
 		return nil, false
 	}
