@@ -259,11 +259,22 @@ try {
         let f = await evaluate(read);
         check(s, "author links to GitHub", f.author === "proshik", f);
         check(s, "source code link in Russian", f.source === "Исходный код", f);
-        check(s, "copyright line without separator dots", f.text === "© 2026 proshik Исходный код", f);
+        const year = await evaluate(`new Date().getFullYear()`);
+        const line = year > 2020 ? `© 2020–${year}, proshik` : "© 2020, proshik";
+        check(s, "copyright range ends with the current year", f.text === `${line} Исходный код`, { f, year });
+        // The page without JS reads the range from the markup.
+        const plain = await evaluate(`fetch("/index.html").then((r) => r.text()).then((html) => {
+            const footer = new DOMParser().parseFromString(html, "text/html").querySelector("footer p");
+            return footer && footer.textContent.replace(/\\s+/g, " ").trim();
+        })`);
+        check(s, "markup without JS carries a whole range", /^© 2020–\d{4}, proshik$/.test(plain || ""), plain);
+        const single = await evaluate(`[messages.ru.copyright(2020), messages.en.copyright(2020), messages.en.copyright(2031)]`);
+        check(s, "in 2020 the line is a single year", single[0] === "© 2020," && single[1] === "© 2020," && single[2] === "© 2020–2031,", single);
         await evaluate(`document.querySelector('.lang-option[data-lang="en"]').click(), true`);
         await sleep(200);
         f = await evaluate(read);
         check(s, "source code link in English", f.source === "Source code" && f.author === "proshik", f);
+        check(s, "copyright range in English ends with the current year", f.text === `${line} Source code`, f);
     }
 
     // 5. In Telegram the neutrals follow the theme, the band keeps its own colours.

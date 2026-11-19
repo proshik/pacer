@@ -1545,7 +1545,8 @@
                 shareHint: "В ссылке сохраняются дистанция и время.",
                 linkCopied: "Ссылка скопирована.",
                 copyFailed: "Не получилось скопировать — возьмите ссылку из адресной строки.",
-                copyright: "© 2026",
+                // Год берётся при загрузке; в 2020 году диапазона ещё нет.
+                copyright: (year = new Date().getFullYear()) => year > 2020 ? `© 2020–${year},` : "© 2020,",
                 author: "proshik",
                 sourceCode: "Исходный код"
             },
@@ -1638,7 +1639,8 @@
                 shareHint: "The link keeps the distance and time.",
                 linkCopied: "Link copied.",
                 copyFailed: "Couldn't copy the link. Take it from the address bar.",
-                copyright: "© 2026",
+                // Год берётся при загрузке; в 2020 году диапазона ещё нет.
+                copyright: (year = new Date().getFullYear()) => year > 2020 ? `© 2020–${year},` : "© 2020,",
                 author: "proshik",
                 sourceCode: "Source code"
             }
@@ -3120,7 +3122,7 @@
 
 <footer class="wrap colophon">
     <div class="colophon-row">
-        <p><span data-i18n="copyright">© 2026</span> <a href="https://github.com/proshik" data-i18n="author">proshik</a></p>
+        <p><span data-i18n="copyright">© 2020–2026,</span> <a href="https://github.com/proshik" data-i18n="author">proshik</a></p>
         <a href="https://github.com/proshik/pacer" data-i18n="sourceCode">Исходный код</a>
     </div>
 </footer>
