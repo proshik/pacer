@@ -155,6 +155,32 @@ const COLOR_TOOLS = `
     };
     true`;
 
+// The footer is a service band: its own background step across the whole
+// viewport, no rule on top, smaller and muted text that still reads.
+const FOOTER_BAND = `(() => {
+    const footer = document.querySelector("footer");
+    const style = getComputedStyle(footer);
+    const band = __rgb(style.backgroundColor);
+    const paper = __rgb(getComputedStyle(document.body).backgroundColor);
+    const rect = footer.getBoundingClientRect();
+    const links = [...footer.querySelectorAll("a")];
+    // The last content of the last shown section, not the section's own padding.
+    const shown = (el) => [...el.children].filter((child) => child.getBoundingClientRect().height > 0);
+    const section = shown(document.querySelector("main")).pop();
+    return {
+        band, paper, step: __contrast(band, paper),
+        fullWidth: Math.abs(rect.width - document.documentElement.clientWidth) < 1 && Math.abs(rect.left) < 1,
+        rule: style.borderTopStyle !== "none" && parseFloat(style.borderTopWidth) > 0,
+        innerRule: [...footer.querySelectorAll("*")].some((el) => { const s = getComputedStyle(el); return s.borderTopStyle !== "none" && parseFloat(s.borderTopWidth) > 0; }),
+        size: parseFloat(getComputedStyle(footer.querySelector("p")).fontSize),
+        bodySize: parseFloat(getComputedStyle(document.body).fontSize),
+        text: __contrast(__rgb(getComputedStyle(footer.querySelector("p")).color), band),
+        links: links.map((a) => __contrast(__rgb(getComputedStyle(a).color), band)),
+        underline: links.every((a) => getComputedStyle(a).textDecorationLine.includes("underline")),
+        gap: Math.round(rect.top - Math.max(...shown(section).map((el) => el.getBoundingClientRect().bottom)))
+    };
+})()`;
+
 // The road is read from a real screenshot: the pixels of the slider row are
 // drawn into a canvas inside the page and sampled there.
 async function roadPixels() {
@@ -258,6 +284,18 @@ try {
         })()`;
         let f = await evaluate(read);
         check(s, "author links to GitHub", f.author === "proshik", f);
+        for (const scheme of ["light", "dark"]) {
+            await open({ width: scheme === "light" ? 390 : 1440, scheme });
+            await evaluate(COLOR_TOOLS);
+            const b = await evaluate(FOOTER_BAND);
+            check(s, `${scheme}: the footer is a full-width band of its own colour`, b.fullWidth && b.band.join() !== b.paper.join() && b.step >= 1.05, b);
+            check(s, `${scheme}: no rule on top of the footer`, !b.rule && !b.innerRule, b);
+            check(s, `${scheme}: footer text is smaller than the body text`, b.size < b.bodySize, b);
+            check(s, `${scheme}: footer text and links read on the band`, b.text >= 4.5 && b.links.length === 2 && b.links.every((v) => v >= 4.5) && b.underline, b);
+            check(s, `${scheme}: 48 px between the last section and the band`, b.gap === 48, b.gap);
+        }
+        await open({ width: 390 });
+        f = await evaluate(read);
         check(s, "source code link in Russian", f.source === "Исходный код", f);
         const year = await evaluate(`new Date().getFullYear()`);
         const line = year > 2020 ? `© 2020–${year}, proshik` : "© 2020, proshik";
@@ -352,7 +390,6 @@ try {
                     note: __contrast(color(".forecast .section-note", "color"), paper),
                     head: __contrast(color(".forecast-table thead th", "color"), paper),
                     hint: __contrast(color(".zone-hint", "color"), paper),
-                    footer: __contrast(color(".colophon-row", "color"), paper),
                     ownRow: __contrast(color(".current-note", "color"), surface)
                 };
                 return {paper, strip, pairs, onPaper};
@@ -361,6 +398,9 @@ try {
             check(s, "the band keeps its own colour", c.strip.join() === plainStrip[scheme].join(), { strip: c.strip, plain: plainStrip[scheme] });
             check(s, "every text on the band stays readable", Object.values(c.pairs).every((v) => v >= 4.5), c.pairs);
             check(s, "muted text on the paper stays readable", Object.values(c.onPaper).every((v) => v >= 4.5), c.onPaper);
+            const band = await evaluate(FOOTER_BAND);
+            check(s, "the footer band takes secondary_bg_color and its text reads", band.band.join() === __hex(theme.secondary_bg_color).join()
+                && band.band.join() !== band.paper.join() && band.text >= 4.5 && band.links.every((v) => v >= 4.5), band);
             check(s, "no horizontal scroll", !(await evaluate(`document.documentElement.scrollWidth > document.documentElement.clientWidth`)));
             check(s, "console clean", consoleProblems.length === 0, consoleProblems);
             const { data } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });

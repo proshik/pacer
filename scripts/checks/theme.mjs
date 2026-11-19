@@ -153,7 +153,7 @@ async function ready() {
 const STATE = `(() => {
     const root = getComputedStyle(document.documentElement);
     const tokens = {};
-    for (const name of ["--paper", "--ink", "--muted", "--line", "--strip", "--strip-line", "--strip-well", "--road"]) {
+    for (const name of ["--paper", "--ink", "--muted", "--line", "--strip", "--strip-line", "--strip-well", "--road", "--footer-bg"]) {
         tokens[name] = root.getPropertyValue(name).trim();
     }
     const toggle = document.querySelector(".theme-toggle");
@@ -163,6 +163,7 @@ const STATE = `(() => {
         scheme: root.colorScheme,
         paper: getComputedStyle(document.body).backgroundColor,
         strip: getComputedStyle(document.querySelector(".strip")).backgroundColor,
+        footer: getComputedStyle(document.querySelector("footer")).backgroundColor,
         metas: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content),
         toggle: toggle && {hidden: toggle.hidden, visible: toggle.getBoundingClientRect().width > 0, pressed: toggle.getAttribute("aria-pressed"),
             label: toggle.getAttribute("aria-label"), disabled: toggle.disabled},
@@ -179,7 +180,7 @@ try {
     const light = await evaluate(STATE);
     await open({ scheme: "dark" });
     const dark = await evaluate(STATE);
-    check("reference", "the system themes differ", !same(light.tokens, dark.tokens) && light.paper !== dark.paper && light.strip !== dark.strip, { light, dark });
+    check("reference", "the system themes differ", !same(light.tokens, dark.tokens) && light.paper !== dark.paper && light.strip !== dark.strip && light.footer !== dark.footer, { light, dark });
 
     // 1. Without a choice the page follows the system and the switch says so.
     {
@@ -198,6 +199,7 @@ try {
         const r = await evaluate(STATE);
         check(s, "data-theme is dark and the switch is pressed", r.theme === "dark" && r.toggle.pressed === "true", r);
         check(s, "paper, band and road take the dark tokens", same(r.tokens, dark.tokens) && r.paper === dark.paper && r.strip === dark.strip, { r: r.tokens, dark: dark.tokens });
+        check(s, "the footer band takes the dark colour", r.footer === dark.footer && r.footer !== r.paper, { footer: r.footer, dark: dark.footer, paper: r.paper });
         check(s, "color-scheme is dark", r.scheme === "dark", r.scheme);
         check(s, "both meta theme colours are dark", same(r.metas, [COLORS.dark, COLORS.dark]), r.metas);
         check(s, "the choice is stored", r.stored === "dark", r.stored);
@@ -223,6 +225,7 @@ try {
         const r = await evaluate(STATE);
         check(s, "paper, band and road take the light tokens", r.theme === "light" && same(r.tokens, light.tokens) && r.paper === light.paper && r.strip === light.strip, { r: r.tokens, light: light.tokens });
         check(s, "color-scheme and meta follow", r.scheme === "light" && same(r.metas, [COLORS.light, COLORS.light]), r);
+        check(s, "the footer band takes the light colour", r.footer === light.footer && r.footer !== r.paper, { footer: r.footer, light: light.footer, paper: r.paper });
         check(s, "switch not pressed", r.toggle.pressed === "false", r.toggle);
         const { data } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
         writeFileSync(join(SHOTS, "theme-light-on-dark-390.png"), Buffer.from(data, "base64"));

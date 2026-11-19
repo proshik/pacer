@@ -162,6 +162,11 @@
              * своей базой выходит прежний цвет страницы, oklch(48% 0.02 250).
              */
             --muted: color-mix(in oklab, var(--ink-soft) 75%, var(--ink));
+            /*
+             * Подвал — вторая полоса страницы, шагом бумаги. Это --surface, поэтому в
+             * Mini App фон берётся из secondary_bg_color, а без него остаётся свой.
+             */
+            --footer-bg: var(--surface);
 
             --mark: #FFD21F;
             --mark-ink: oklch(16% 0.08 260);
@@ -1141,7 +1146,7 @@
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             gap: var(--space-3xl);
-            padding-block: var(--space-3xl);
+            padding-block: var(--space-3xl) var(--space-2xl);
         }
 
         .table-wrap {
@@ -1305,9 +1310,12 @@
 
         /* ---------- сохранённые расчёты ---------- */
 
-        /* Подвал стоит сразу под разделом: 32 px до линии подвала, а не 64. */
+        /*
+         * До полосы подвала 48 px и от сохранённых расчётов, и от прогноза, если
+         * раздела нет; отступ сверху вместе с листом даёт прежние 64 px.
+         */
         .saved {
-            padding-bottom: var(--space-xl);
+            padding-block: var(--space-md) var(--space-2xl);
         }
 
         .saved .section-note {
@@ -1410,8 +1418,14 @@
 
         /* ---------- подвал ---------- */
 
+        /*
+         * Подвал — служебная полоса на всю ширину: фон на шаг от бумаги вместо
+         * линии, текст мельче и приглушённый, чтобы не читаться строкой списка.
+         */
         .colophon {
-            padding-bottom: var(--space-lg);
+            background: var(--footer-bg);
+            color: var(--muted);
+            font-size: var(--text-sm);
         }
 
         .colophon-row {
@@ -1420,26 +1434,25 @@
             align-items: baseline;
             justify-content: space-between;
             gap: var(--space-xs) var(--space-lg);
-            padding-top: var(--space-md);
-            border-top: var(--hair) solid var(--line);
-            color: var(--muted);
-            font-size: var(--text-sm);
+            padding-top: var(--space-lg);
+            padding-bottom: max(var(--space-lg), env(safe-area-inset-bottom));
         }
 
         .colophon a {
-            color: var(--ink);
+            border-radius: var(--bar);
+            color: var(--muted);
             text-decoration: underline;
-            text-decoration-color: var(--line);
+            text-decoration-thickness: var(--hair);
             text-underline-offset: 3px;
-            transition: text-decoration-color var(--dur-micro) var(--ease);
+            transition: color var(--dur-micro) var(--ease);
         }
 
         .colophon a:hover {
-            text-decoration-color: currentColor;
+            color: var(--ink);
         }
 
         .colophon a:active {
-            color: var(--muted);
+            color: var(--line-strong);
         }
 
         /* ---------- узкие экраны ---------- */
@@ -3298,8 +3311,8 @@
     </section>
 </main>
 
-<footer class="wrap colophon">
-    <div class="colophon-row">
+<footer class="colophon">
+    <div class="wrap colophon-row">
         <p><span data-i18n="copyright">© 2020–2026,</span> <a href="https://github.com/proshik" data-i18n="author">proshik</a></p>
         <a href="https://github.com/proshik/pacer" data-i18n="sourceCode">Исходный код</a>
     </div>
