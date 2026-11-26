@@ -1,5 +1,12 @@
 # Pacer
 
+[![CI](https://github.com/proshik/pacer/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/proshik/pacer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/proshik/pacer)](https://github.com/proshik/pacer/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/proshik/pacer)](go.mod)
+[![License](https://img.shields.io/github/license/proshik/pacer)](LICENSE)
+[![pacer.proshik.com](https://img.shields.io/website?url=https%3A%2F%2Fpacer.proshik.com&label=pacer.proshik.com)](https://pacer.proshik.com)
+[![Telegram](https://img.shields.io/badge/Telegram-%40PacerGoBot-26A5E4?logo=telegram&logoColor=white)](https://t.me/PacerGoBot)
+
 Беговой калькулятор: задайте дистанцию и время или темп, и Pacer посчитает второе. Работает
 как веб-страница, как Telegram-бот и как Mini App внутри Telegram.
 
