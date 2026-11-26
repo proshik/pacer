@@ -3,6 +3,30 @@
 Беговой калькулятор: задайте дистанцию и время или темп, и Pacer посчитает второе. Работает
 как веб-страница, как Telegram-бот и как Mini App внутри Telegram.
 
+Открыть калькулятор: https://pacer.proshik.com
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/calculator-dark.png">
+  <img src="docs/images/calculator-light.png" alt="Pacer: 10 км за 50:00 — это 5:00 на километр, табло со временем и темпом и раскладка по километрам">
+</picture>
+
+Ниже на той же странице — прогноз на другие дистанции, VDOT и тренировочные темпы:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/forecast-dark.png">
+  <img src="docs/images/forecast-light.png" alt="Прогноз по формулам Ригеля и Кэмерона, VDOT 40,0 и тренировочные темпы для 10 км за 50:00">
+</picture>
+
+На телефоне — та же страница в одну колонку; в Mini App вёрстка такая же, а нейтральные цвета
+берутся из темы Telegram:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/mobile-dark.png">
+    <img src="docs/images/mobile-light.png" width="320" alt="Pacer на экране телефона шириной 390 px: план забега, дистанция, время и темп">
+  </picture>
+</p>
+
 Что умеет страница:
 - время ↔ темп на любой дистанции: слайдер точный до 50 км (шаг 100 м) и быстрый дальше, до
   500 км; пресеты от 1 км до 100 миль, всё длиннее — в поле «Точно, в метрах»;
